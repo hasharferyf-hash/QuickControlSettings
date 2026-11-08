@@ -14,6 +14,8 @@ import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -291,19 +293,26 @@ class MainActivity : Activity() {
         switch(c, "חיסכון בסוללה", power.isPowerSaveMode, granted) { checked ->
             try {
                 val written = Settings.Global.putInt(contentResolver, "low_power", if (checked) 1 else 0)
-                val setting = Settings.Global.getInt(contentResolver, "low_power", 0) == 1
-                val active = power.isPowerSaveMode
-                when {
-                    !written -> toast("הכתיבה להגדרה נכשלה")
-                    setting && active == checked -> toast(if (checked) "חיסכון בסוללה הופעל" else "חיסכון בסוללה כובה")
-                    else -> toast("ההגדרה נכתבה, אך המערכת לא החילה את מצב החיסכון")
+                if (!written) {
+                    toast("הכתיבה להגדרה נכשלה")
+                    render()
+                } else {
+                    // The system observes this setting asynchronously; verify after its observer runs.
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        val setting = Settings.Global.getInt(contentResolver, "low_power", 0) == 1
+                        val active = power.isPowerSaveMode
+                        when {
+                            setting && active == checked -> toast(if (checked) "חיסכון בסוללה הופעל" else "חיסכון בסוללה כובה")
+                            else -> toast("ההגדרה נכתבה, אך המערכת לא החילה את מצב החיסכון")
+                        }
+                        render()
+                    }, 500)
                 }
             } catch (_: SecurityException) {
                 toast("נדרשת הרשאת WRITE_SECURE_SETTINGS")
             } catch (_: Exception) {
                 toast("לא ניתן לשנות את מצב חיסכון בסוללה במכשיר זה")
             }
-            render()
         }
         textIn(c, "נכתב דרך Settings.Global (low_power), והמצב נבדק דרך PowerManager. ייתכן שמדיניות היצרן תחסום את הפעולה.", 12, secondary)
         if (!granted) textIn(c, "יש להעניק WRITE_SECURE_SETTINGS באמצעות ADB.", 12, secondary)
