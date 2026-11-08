@@ -35,7 +35,7 @@ Important: Device Owner privileges belong to the package that Android has design
 
 Declaring a permission is not the same as receiving it, and receiving a permission does not override API-level restrictions.
 
-- Modern Android restricts ordinary apps from enabling/disabling Wi-Fi, Bluetooth, Location, Battery Saver, global dark theme and other protected system controls.
+- Modern Android restricts ordinary apps from enabling/disabling Wi-Fi, Bluetooth, Location, global dark theme and other protected system controls. Battery Saver can be attempted by writing the `low_power` global setting with `WRITE_SECURE_SETTINGS`, but the system or OEM may reject or override the request.
 - Wi-Fi and Bluetooth permissions can allow discovery, connection or communication in supported cases; they do not generally authorize toggling the system radios.
 - `WRITE_SECURE_SETTINGS` is not a universal system-control permission.
 - `WRITE_SETTINGS` and Notification Policy Access require separate special access.
@@ -43,14 +43,20 @@ Declaring a permission is not the same as receiving it, and receiving a permissi
 
 ## Current direct controls
 
-- Screen brightness and auto-rotate, when `WRITE_SETTINGS` access is already available.
+- Screen brightness, auto-rotate, screen timeout and touch haptic feedback, when `WRITE_SETTINGS` access is already available.
 - Media, ring, notification and alarm volume.
 - Ringer mode.
 - Flashlight, after CAMERA runtime permission is granted.
 - Do Not Disturb, after Notification Policy Access is granted.
+- Battery Saver through `Settings.Global` with `WRITE_SECURE_SETTINGS`, with the actual state checked through `PowerManager`.
+- System animation scales and stay-awake-while-charging through `Settings.Global`, with `WRITE_SECURE_SETTINGS`.
 - App-local dark appearance only.
 
-The current UI does not yet implement Wi-Fi, Bluetooth, Location, NFC or Battery Saver controls. Their manifest permissions are declared for future implementation where Android permits it; they do not imply those controls can be toggled on every device.
+The current UI does not yet implement direct Wi-Fi, Bluetooth, Location or NFC toggles. Their manifest permissions are declared for future implementation where Android permits it; they do not imply those controls can be toggled on every device.
+
+## UI
+
+The app uses a Material 3 DayNight theme with dynamic system colors on supported Android versions, Material switches and buttons, rounded surfaces, and RTL layout.
 
 ## Build
 
