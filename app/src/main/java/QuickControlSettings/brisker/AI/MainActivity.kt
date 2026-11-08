@@ -89,14 +89,14 @@ class MainActivity : Activity() {
         )
         capabilityCard(
             "Wi-Fi, Bluetooth, נקודה חמה, מיקום ו-NFC",
-            "בגרסאות Android מודרניות, אפליקציה רגילה אינה רשאית להפעיל ולכבות את רוב המתגים האלה ישירות. הרשאות רגילות אינן מסירות את ההגבלה."
+            "ההרשאות המתאימות הוצהרו במניפסט, אך חלק מהפעולות מוגבלות על ידי Android. הרשאות Bluetooth/Wi-Fi מאפשרות פעולות מסוימות כמו סריקה או חיבור, ולא בהכרח הפעלה וכיבוי של המתג הגלובלי. Device Owner של אפליקציה אחרת אינו מעביר אל Quick Control את סמכויות הניהול."
         )
 
         heading("הרשאות")
         secureSettingsCard()
         capabilityCard(
             "הרשאות מערכת נוספות",
-            "WRITE_SETTINGS וגישת נא לא להפריע הן הרשאות מיוחדות שמחייבות אישור משתמש דרך Android. אין דרך תקנית לאשר אותן מתוך האפליקציה עצמה."
+            "הרשאות runtime יידרשו לפי הצורך. WRITE_SETTINGS וגישת נא לא להפריע הן הרשאות מיוחדות שאינן ניתנות באמצעות pm grant רגיל. האפליקציה לא תפתח מסכי מערכת; יש להעניק אותן מראש באמצעות תהליך provisioning או ADB/AppOps מתאים, אם גרסת המכשיר מאפשרת זאת."
         )
         addText(
             "האפליקציה לא תפתח מסכי מערכת. פעולות שאינן מותרות לאפליקציה רגילה יוצגו כלא זמינות, ולא יעמידו פנים שהשינוי בוצע.",
@@ -282,8 +282,21 @@ class MainActivity : Activity() {
     private fun secureSettingsCard() {
         val c = card()
         textIn(c, "WRITE_SECURE_SETTINGS", 14, dark, true)
-        textIn(c, "ההרשאה ניתנת באמצעות ADB. היא אינה מעניקה הרשאות מערכת חתומות ואינה עוקפת את מגבלות Android על Wi-Fi, חיסכון בסוללה, מצב כהה גלובלי או מתגים מוגנים אחרים.", 12, secondary)
-        val command = "adb shell pm grant $packageName android.permission.WRITE_SECURE_SETTINGS"
+        textIn(c, "פקודות ADB להרשאות שניתן להעניק במכשירים תומכים. פקודות AppOps והרשאות runtime תלויות בגרסת Android ובמדיניות היצרן. הן אינן מעניקות לאפליקציה סמכויות Device Owner של אפליקציה אחרת.", 12, secondary)
+        val command = """
+            adb shell pm grant $packageName android.permission.WRITE_SECURE_SETTINGS
+            adb shell pm grant $packageName android.permission.CAMERA
+            adb shell pm grant $packageName android.permission.ACCESS_COARSE_LOCATION
+            adb shell pm grant $packageName android.permission.ACCESS_FINE_LOCATION
+            adb shell pm grant $packageName android.permission.ACCESS_BACKGROUND_LOCATION
+            adb shell pm grant $packageName android.permission.BLUETOOTH_CONNECT
+            adb shell pm grant $packageName android.permission.BLUETOOTH_SCAN
+            adb shell pm grant $packageName android.permission.BLUETOOTH_ADVERTISE
+            adb shell pm grant $packageName android.permission.NEARBY_WIFI_DEVICES
+            adb shell pm grant $packageName android.permission.POST_NOTIFICATIONS
+            adb shell appops set $packageName android:write_settings allow
+            adb shell cmd notification allow_dnd $packageName
+        """.trimIndent()
         val b = Button(this).apply {
             text = "העתקת פקודת ADB"
             isAllCaps = false
