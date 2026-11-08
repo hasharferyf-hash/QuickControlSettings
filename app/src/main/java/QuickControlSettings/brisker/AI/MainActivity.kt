@@ -294,7 +294,7 @@ class MainActivity : Activity() {
             adb shell pm grant $packageName android.permission.BLUETOOTH_ADVERTISE
             adb shell pm grant $packageName android.permission.NEARBY_WIFI_DEVICES
             adb shell pm grant $packageName android.permission.POST_NOTIFICATIONS
-            adb shell appops set $packageName android:write_settings allow
+            adb shell appops set $packageName WRITE_SETTINGS allow
             adb shell cmd notification allow_dnd $packageName
         """.trimIndent()
         val b = Button(this).apply {
