@@ -23,7 +23,9 @@ This is a development-level permission and is grantable through ADB on supported
 - `CAMERA`, `BLUETOOTH_CONNECT`, `BLUETOOTH_SCAN`, `NEARBY_WIFI_DEVICES`, and location permissions: runtime permissions, where applicable.
 - `ACCESS_BACKGROUND_LOCATION`: subject to Android's separate background-location approval rules.
 
-The app is intentionally designed not to open Android Settings screens. If a required special access has not already been provisioned, the related control remains unavailable and explains why.
+Whenever a supported permission is missing, the relevant control provides a one-tap shortcut to the exact Android access screen: `WRITE_SETTINGS` opens the per-app Modify system settings page, and Notification Policy Access opens the Do Not Disturb access page. Runtime permissions (for example CAMERA) are requested when the related feature is used; if access was denied, the app also offers a shortcut to its app-permissions page. If an OEM does not expose the exact destination, the app falls back to its app-details screen.
+
+`WRITE_SECURE_SETTINGS` is different: Android does not provide an ordinary user-facing grant screen for it. The app explains that ADB is required and offers a one-tap copy of the exact `pm grant` command. It does not pretend that opening a Settings page can grant this permission.
 
 ## Device Owner compatibility
 
