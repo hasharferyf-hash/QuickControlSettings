@@ -13,11 +13,14 @@ import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.materialswitch.MaterialSwitch
+import android.graphics.drawable.GradientDrawable
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
@@ -32,10 +35,10 @@ class MainActivity : Activity() {
     private lateinit var notifications: NotificationManager
     private var torchId: String? = null
     private var torchEnabled = false
-    private val dark = Color.rgb(25, 32, 44)
-    private val secondary = Color.rgb(112, 122, 138)
-    private val accent = Color.rgb(48, 103, 210)
-    private val cardColor = Color.WHITE
+    private val dark get() = com.google.android.material.color.MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurface, Color.BLACK)
+    private val secondary get() = com.google.android.material.color.MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurfaceVariant, Color.DKGRAY)
+    private val accent get() = com.google.android.material.color.MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary, Color.BLUE)
+    private val cardColor get() = com.google.android.material.color.MaterialColors.getColor(this, com.google.android.material.R.attr.colorSurfaceContainerLow, Color.WHITE)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,7 +56,7 @@ class MainActivity : Activity() {
 
     private fun render() {
         val scroll = ScrollView(this).apply {
-            setBackgroundColor(Color.rgb(245, 247, 250))
+            setBackgroundColor(com.google.android.material.color.MaterialColors.getColor(this@MainActivity, com.google.android.material.R.attr.colorSurface, Color.WHITE))
             isFillViewport = true
         }
         page = LinearLayout(this).apply {
@@ -83,10 +86,11 @@ class MainActivity : Activity() {
 
         heading("כלים")
         torchCard()
-        capabilityCard(
-            "חיסכון בסוללה",
-            "Android אינה מאפשרת לאפליקציה רגילה להפעיל או לכבות מצב חיסכון בסוללה. אפשר להציג את המצב בלבד."
-        )
+        batterySaverCard()
+        animationScaleCard()
+        stayAwakeCard()
+        screenTimeoutCard()
+        hapticCard()
         capabilityCard(
             "Wi-Fi, Bluetooth, נקודה חמה, מיקום ו-NFC",
             "ההרשאות המתאימות הוצהרו במניפסט, אך חלק מהפעולות מוגבלות על ידי Android. הרשאות Bluetooth/Wi-Fi מאפשרות פעולות מסוימות כמו סריקה או חיבור, ולא בהכרח הפעלה וכיבוי של המתג הגלובלי. Device Owner של אפליקציה אחרת אינו מעביר אל Quick Control את סמכויות הניהול."
@@ -115,7 +119,11 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(dp(14), dp(11), dp(14), dp(11))
-            setBackgroundColor(cardColor)
+            background = GradientDrawable().apply {
+                setColor(cardColor)
+                cornerRadius = dp(20).toFloat()
+                setStroke(dp(1), com.google.android.material.color.MaterialColors.getColor(this@MainActivity, com.google.android.material.R.attr.colorOutlineVariant, Color.LTGRAY))
+            }
             elevation = dp(1).toFloat()
         }
         val p = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -273,6 +281,101 @@ class MainActivity : Activity() {
         if (id == null) textIn(c, "במכשיר לא זוהה פנס LED.", 12, secondary)
     }
 
+
+    private fun hasSecureSettings(): Boolean =
+        checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED
+
+    private fun batterySaverCard() {
+        val c = card()
+        val power = getSystemService(POWER_SERVICE) as PowerManager
+        val granted = hasSecureSettings()
+        switch(c, "חיסכון בסוללה", power.isPowerSaveMode, granted) { checked ->
+            try {
+                val written = Settings.Global.putInt(contentResolver, "low_power", if (checked) 1 else 0)
+                val setting = Settings.Global.getInt(contentResolver, "low_power", 0) == 1
+                val active = power.isPowerSaveMode
+                when {
+                    !written -> toast("הכתיבה להגדרה נכשלה")
+                    setting && active == checked -> toast(if (checked) "חיסכון בסוללה הופעל" else "חיסכון בסוללה כובה")
+                    else -> toast("ההגדרה נכתבה, אך המערכת לא החילה את מצב החיסכון")
+                }
+            } catch (_: SecurityException) {
+                toast("נדרשת הרשאת WRITE_SECURE_SETTINGS")
+            } catch (_: Exception) {
+                toast("לא ניתן לשנות את מצב חיסכון בסוללה במכשיר זה")
+            }
+            render()
+        }
+        textIn(c, "נכתב דרך Settings.Global (low_power), והמצב נבדק דרך PowerManager. ייתכן שמדיניות היצרן תחסום את הפעולה.", 12, secondary)
+        if (!granted) textIn(c, "יש להעניק WRITE_SECURE_SETTINGS באמצעות ADB.", 12, secondary)
+    }
+
+    private fun animationScaleCard() {
+        val c = card()
+        val keys = listOf("window_animation_scale", "transition_animation_scale", "animator_duration_scale")
+        val granted = hasSecureSettings()
+        val disabled = try { Settings.Global.getFloat(contentResolver, keys[0], 1f) == 0f } catch (_: Exception) { false }
+        switch(c, "ביטול אנימציות מערכת", disabled, granted) { checked ->
+            try {
+                val value = if (checked) 0f else 1f
+                val results = keys.map { Settings.Global.putFloat(contentResolver, it, value) }
+                if (results.all { it }) toast(if (checked) "האנימציות בוטלו" else "האנימציות הוחזרו")
+                else toast("חלק מהגדרות האנימציה לא עודכנו")
+            } catch (_: SecurityException) { toast("נדרשת WRITE_SECURE_SETTINGS") }
+            render()
+        }
+        textIn(c, "משנה את שלושת סולמות האנימציה של Android.", 12, secondary)
+    }
+
+    private fun stayAwakeCard() {
+        val c = card()
+        val granted = hasSecureSettings()
+        val mask = try { Settings.Global.getInt(contentResolver, "stay_on_while_plugged_in", 0) } catch (_: Exception) { 0 }
+        switch(c, "השאר מסך דולק בזמן טעינה", mask != 0, granted) { checked ->
+            try {
+                Settings.Global.putInt(contentResolver, "stay_on_while_plugged_in", if (checked) 7 else 0)
+            } catch (_: SecurityException) { toast("נדרשת WRITE_SECURE_SETTINGS") }
+            render()
+        }
+        textIn(c, "חל על USB, מטען AC וטעינה אלחוטית.", 12, secondary)
+    }
+
+    private fun screenTimeoutCard() {
+        val c = card()
+        val allowed = Settings.System.canWrite(this)
+        val options = listOf(15000, 30000, 60000, 120000, 300000, 600000)
+        val current = Settings.System.getInt(contentResolver, Settings.System.SCREEN_OFF_TIMEOUT, 60000)
+        val index = options.indexOf(current).let { if (it >= 0) it else 2 }
+        textIn(c, "כיבוי מסך אוטומטי", 14, dark, true)
+        val button = MaterialButton(this).apply {
+            text = "משך נוכחי: " + timeoutLabel(current) + " · הקש לשינוי"
+            isAllCaps = false
+            isEnabled = allowed
+            setOnClickListener {
+                val next = options[(index + 1) % options.size]
+                Settings.System.putInt(contentResolver, Settings.System.SCREEN_OFF_TIMEOUT, next)
+                render()
+            }
+        }
+        c.addView(button)
+        if (!allowed) textIn(c, "נדרשת WRITE_SETTINGS.", 12, secondary)
+    }
+
+    private fun timeoutLabel(ms: Int): String = when {
+        ms < 60000 -> "${ms / 1000} שניות"
+        ms % 60000 == 0 -> "${ms / 60000} דקות"
+        else -> "${ms / 1000} שניות"
+    }
+
+    private fun hapticCard() {
+        val c = card()
+        val allowed = Settings.System.canWrite(this)
+        val enabled = Settings.System.getInt(contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) == 1
+        switch(c, "משוב רטט למגע", enabled, allowed) { checked ->
+            Settings.System.putInt(contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, if (checked) 1 else 0)
+        }
+    }
+
     private fun capabilityCard(title: String, explanation: String) {
         val c = card()
         textIn(c, title, 14, dark, true)
@@ -282,7 +385,7 @@ class MainActivity : Activity() {
     private fun secureSettingsCard() {
         val c = card()
         textIn(c, "WRITE_SECURE_SETTINGS", 14, dark, true)
-        textIn(c, "פקודות ADB להרשאות שניתן להעניק במכשירים תומכים. פקודות AppOps והרשאות runtime תלויות בגרסת Android ובמדיניות היצרן. הן אינן מעניקות לאפליקציה סמכויות Device Owner של אפליקציה אחרת.", 12, secondary)
+        textIn(c, "WRITE_SECURE_SETTINGS מאפשרת כתיבה לחלק מהגדרות Secure ו-Global, אך אינה root ואינה עוקפת כל מגבלת מערכת או יצרן. הרשאות מיוחדות אחרות עדיין נדרשות בנפרד.", 12, secondary)
         val command = """
             adb shell pm grant $packageName android.permission.WRITE_SECURE_SETTINGS
             adb shell pm grant $packageName android.permission.CAMERA
@@ -313,7 +416,7 @@ class MainActivity : Activity() {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val title = textIn(row, label, 14, dark, true)
         title.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        val control = Switch(this).apply {
+        val control = MaterialSwitch(this).apply {
             isChecked = checked
             isEnabled = enabled
             setOnCheckedChangeListener { _, value -> action(value) }
