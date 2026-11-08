@@ -94,19 +94,15 @@ class MainActivity : Activity() {
         screenTimeoutCard()
         hapticCard()
         capabilityCard(
-            "Wi-Fi, Bluetooth, נקודה חמה, מיקום ו-NFC",
-            "ההרשאות המתאימות הוצהרו במניפסט, אך חלק מהפעולות מוגבלות על ידי Android. הרשאות Bluetooth/Wi-Fi מאפשרות פעולות מסוימות כמו סריקה או חיבור, ולא בהכרח הפעלה וכיבוי של המתג הגלובלי. Device Owner של אפליקציה אחרת אינו מעביר אל Quick Control את סמכויות הניהול."
+            "Wi-Fi, Bluetooth, מיקום ו-NFC",
+            "Android מגבילה אפליקציות רגילות בשינוי מתגים אלה. הרשאות סריקה או חיבור אינן מעניקות הרשאה להפעיל ולכבות את הרכיבים."
         )
 
         heading("הרשאות")
         secureSettingsCard()
         capabilityCard(
-            "הרשאות מערכת נוספות",
-            "הרשאות runtime מתבקשות בעת הפעלת התכונה. הרשאות מיוחדות כמו WRITE_SETTINGS וגישת נא לא להפריע פותחות בלחיצה אחת את מסך ההגדרה המתאים. WRITE_SECURE_SETTINGS אינה ניתנת לאישור ידני במסך רגיל ודורשת ADB."
-        )
-        addText(
-            "כאשר חסרה הרשאה, יוצג כפתור לפתיחת מסך ההרשאה המתאים או לבקשת הרשאת runtime. הרשאות שאינן ניתנות לאישור דרך ממשק המכשיר, כגון WRITE_SECURE_SETTINGS, יוסברו בנפרד.",
-            12, secondary
+            "הרשאות מערכת",
+            "הרשאות רגילות מתבקשות בעת הצורך. WRITE_SETTINGS וגישת נא לא להפריע מאושרות בהגדרות; WRITE_SECURE_SETTINGS דורשת ADB."
         )
     }
 
@@ -213,24 +209,29 @@ class MainActivity : Activity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val titleGroup = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+        textIn(row, "Quick Control", 23, dark, true).layoutParams =
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+
+        val aboutButton = MaterialButton(this).apply {
+            text = "אודות"
+            isAllCaps = false
+            minWidth = 0
+            setPadding(dp(12), 0, dp(12), 0)
+            setOnClickListener { showAbout() }
         }
-        textIn(titleGroup, "Quick Control", 25, dark, true)
-        textIn(titleGroup, "שליטה מהירה בהגדרות המכשיר", 13, secondary)
-        row.addView(titleGroup, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(aboutButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)))
 
         val themeButton = MaterialButton(this).apply {
-            text = if (isAppDark()) "☀" else "☾"
-            textSize = 23f
+            text = ""
             isAllCaps = false
-            contentDescription = if (isAppDark()) "מעבר למצב בהיר באפליקציה" else "מעבר למצב כהה באפליקציה"
+            contentDescription = if (isAppDark()) "מעבר למצב בהיר" else "מעבר למצב כהה"
             minWidth = dp(48)
             minimumWidth = dp(48)
             minimumHeight = dp(48)
             setPadding(0, 0, 0, 0)
             cornerRadius = dp(24)
+            setIconResource(if (isAppDark()) R.drawable.ic_light_mode else R.drawable.ic_dark_mode)
+            iconSize = dp(24)
             setOnClickListener {
                 if (Build.VERSION.SDK_INT >= 31) {
                     val manager = getSystemService(UI_MODE_SERVICE) as UiModeManager
@@ -238,14 +239,21 @@ class MainActivity : Activity() {
                         if (isAppDark()) UiModeManager.MODE_NIGHT_NO else UiModeManager.MODE_NIGHT_YES
                     )
                 } else {
-                    toast("שינוי ערכת נושא מתוך האפליקציה דורש Android 12 ומעלה")
+                    toast("שינוי ערכת נושא דורש Android 12 ומעלה")
                 }
             }
         }
-        val buttonParams = LinearLayout.LayoutParams(dp(48), dp(48))
-        buttonParams.marginStart = dp(8)
+        val buttonParams = LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginStart = dp(8) }
         row.addView(themeButton, buttonParams)
         page.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+
+    private fun showAbout() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Quick Control")
+            .setMessage("כלי לשליטה מהירה בהגדרות המכשיר.\\n\\nפותח על ידי @הבריסקער-רב\\nפורום מתמחים טופ")
+            .setPositiveButton("סגירה", null)
+            .show()
     }
 
     private fun globalDarkModeCard() {
@@ -281,7 +289,7 @@ class MainActivity : Activity() {
                 render()
             }
         }
-        textIn(c, "משנה את מצב התצוגה של Android כולו, כולל ממשק המערכת ואפליקציות שתומכות בערכת נושא כהה. הפעולה דורשת WRITE_SECURE_SETTINGS; ייתכן שממשק יצרן מסוים יתעלם ממנה.", 12, secondary)
+        textIn(c, "משנה את ערכת הנושא של המכשיר. דורש WRITE_SECURE_SETTINGS ולא נתמך בכל ממשקי היצרנים.", 12, secondary)
         if (!granted) {
             textIn(c, "יש להעניק WRITE_SECURE_SETTINGS באמצעות ADB כדי להפעיל את המתג.", 12, secondary)
             permissionButton(c, "העתקת פקודת ADB") { secureSettingsHelp() }
@@ -406,7 +414,7 @@ class MainActivity : Activity() {
                 render()
             }
         }
-        textIn(c, "נכתב דרך Settings.Global (low_power), והמצב נבדק דרך PowerManager. ייתכן שמדיניות היצרן תחסום את הפעולה.", 12, secondary)
+        textIn(c, "הפעולה תלויה בתמיכת Android וממשק היצרן.", 12, secondary)
         if (!granted) {
             textIn(c, "ההרשאה הזו אינה ניתנת לאישור ידני במסך ההגדרות הרגיל. יש להעניק אותה באמצעות ADB מהמחשב.", 12, secondary)
             permissionButton(c, "העתקת פקודת הענקת הרשאה") {
@@ -451,16 +459,23 @@ class MainActivity : Activity() {
         val allowed = Settings.System.canWrite(this)
         val options = listOf(15000, 30000, 60000, 120000, 300000, 600000)
         val current = Settings.System.getInt(contentResolver, Settings.System.SCREEN_OFF_TIMEOUT, 60000)
-        val index = options.indexOf(current).let { if (it >= 0) it else 2 }
+        val labels = options.map { timeoutLabel(it) }.toTypedArray()
         textIn(c, "כיבוי מסך אוטומטי", 14, dark, true)
         val button = MaterialButton(this).apply {
-            text = "משך נוכחי: " + timeoutLabel(current) + " · הקש לשינוי"
+            text = "משך נוכחי: " + timeoutLabel(current)
             isAllCaps = false
             isEnabled = allowed
             setOnClickListener {
-                val next = options[(index + 1) % options.size]
-                Settings.System.putInt(contentResolver, Settings.System.SCREEN_OFF_TIMEOUT, next)
-                render()
+                val selected = options.indexOf(current)
+                android.app.AlertDialog.Builder(this@MainActivity)
+                    .setTitle("כיבוי מסך אוטומטי")
+                    .setSingleChoiceItems(labels, selected) { dialog, which ->
+                        Settings.System.putInt(contentResolver, Settings.System.SCREEN_OFF_TIMEOUT, options[which])
+                        dialog.dismiss()
+                        render()
+                    }
+                    .setNegativeButton("ביטול", null)
+                    .show()
             }
         }
         c.addView(button)
@@ -494,7 +509,7 @@ class MainActivity : Activity() {
     private fun secureSettingsCard() {
         val c = card()
         textIn(c, "WRITE_SECURE_SETTINGS", 14, dark, true)
-        textIn(c, "WRITE_SECURE_SETTINGS מאפשרת כתיבה לחלק מהגדרות Secure ו-Global, אך אינה root ואינה עוקפת כל מגבלת מערכת או יצרן. הרשאות מיוחדות אחרות עדיין נדרשות בנפרד.", 12, secondary)
+        textIn(c, "מאפשרת שינוי של חלק מהגדרות המערכת. אינה root ואינה עוקפת את כל מגבלות Android.", 12, secondary)
         val command = """
             adb shell pm grant $packageName android.permission.WRITE_SECURE_SETTINGS
             adb shell pm grant $packageName android.permission.CAMERA
