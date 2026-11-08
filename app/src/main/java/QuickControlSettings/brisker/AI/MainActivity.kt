@@ -251,7 +251,7 @@ class MainActivity : Activity() {
     private fun showAbout() {
         android.app.AlertDialog.Builder(this)
             .setTitle("Quick Control")
-            .setMessage("כלי לשליטה מהירה בהגדרות המכשיר.\\n\\nפותח על ידי @הבריסקער-רב\\nפורום מתמחים טופ")
+            .setMessage("כלי לשליטה מהירה בהגדרות המכשיר.\n\nפותח על ידי @הבריסקער-רב\nפורום מתמחים טופ")
             .setPositiveButton("סגירה", null)
             .show()
     }
