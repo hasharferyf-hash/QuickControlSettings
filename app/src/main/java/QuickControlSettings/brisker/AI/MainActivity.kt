@@ -3,15 +3,16 @@ package QuickControlSettings.brisker.AI
 import android.app.Activity
 import android.app.NotificationManager
 import android.app.UiModeManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -23,303 +24,108 @@ import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
-import android.content.ClipData
-import android.content.ClipboardManager
 
 class MainActivity : Activity() {
-    private lateinit var root: LinearLayout
+    private lateinit var page: LinearLayout
     private lateinit var audio: AudioManager
-    private lateinit var notificationManager: NotificationManager
-    private lateinit var cameraManager: CameraManager
-    private var torchOn = false
-    private var torchCameraId: String? = null
-    private var refreshing = false
-
-    private val ink = Color.rgb(30, 41, 59)
-    private val muted = Color.rgb(100, 116, 139)
-    private val blue = Color.rgb(56, 103, 214)
-    private val surface = Color.WHITE
-    private val page = Color.rgb(244, 246, 250)
+    private lateinit var camera: CameraManager
+    private lateinit var notifications: NotificationManager
+    private var torchId: String? = null
+    private var torchEnabled = false
+    private val dark = Color.rgb(25, 32, 44)
+    private val secondary = Color.rgb(112, 122, 138)
+    private val accent = Color.rgb(48, 103, 210)
+    private val cardColor = Color.WHITE
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         audio = getSystemService(AUDIO_SERVICE) as AudioManager
-        notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        cameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
-        torchCameraId = findBackCameraWithFlash()
-        buildScreen()
+        camera = getSystemService(CAMERA_SERVICE) as CameraManager
+        notifications = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        torchId = findFlashCamera()
+        render()
     }
 
     override fun onResume() {
         super.onResume()
-        if (::root.isInitialized) refreshDynamicControls()
+        if (::page.isInitialized) render()
     }
 
-    private fun buildScreen() {
+    private fun render() {
         val scroll = ScrollView(this).apply {
-            setBackgroundColor(page)
+            setBackgroundColor(Color.rgb(245, 247, 250))
             isFillViewport = true
         }
-        root = LinearLayout(this).apply {
+        page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
-            setPadding(dp(18), dp(22), dp(18), dp(30))
+            setPadding(dp(16), dp(20), dp(16), dp(28))
         }
-        scroll.addView(root)
+        scroll.addView(page)
         setContentView(scroll)
 
-        text(root, "Quick Control Settings", 25, ink, true)
-        text(root, "מרכז שליטה מהיר להגדרות היומיומיות של המכשיר", 14, muted)
-        spacer(root, 18)
+        addText("Quick Control", 25, dark, true)
+        addText("שליטה מהירה בהגדרות המכשיר", 13, secondary)
+        gap(16)
 
-        section("תצוגה")
-        brightnessControl()
-        rotationControl()
-        actionRow("מצב כהה", "פתיחת הגדרות תצוגה של Android") {
-            openSettings(Settings.ACTION_DISPLAY_SETTINGS)
-        }
-        actionRow("זמן כיבוי מסך", "הגדרת משך הזמן עד לכיבוי המסך") {
-            openSettings(Settings.ACTION_DISPLAY_SETTINGS)
-        }
+        heading("תצוגה")
+        brightnessCard()
+        rotationCard()
+        darkModeCard()
 
-        section("צלילים והתראות")
-        volumeControl("עוצמת מדיה", AudioManager.STREAM_MUSIC)
-        volumeControl("עוצמת צלצול", AudioManager.STREAM_RING)
-        volumeControl("עוצמת התראות", AudioManager.STREAM_NOTIFICATION)
-        volumeControl("עוצמת שעון מעורר", AudioManager.STREAM_ALARM)
-        ringerControl()
-        dndControl()
+        heading("צלילים")
+        volumeCard("מדיה", AudioManager.STREAM_MUSIC)
+        volumeCard("צלצול", AudioManager.STREAM_RING)
+        volumeCard("התראות", AudioManager.STREAM_NOTIFICATION)
+        volumeCard("שעון מעורר", AudioManager.STREAM_ALARM)
+        ringerCard()
+        dndCard()
 
-        section("כלים מהירים")
-        torchControl()
-        batterySaverControl()
-        actionRow("Wi-Fi ואינטרנט", "פתיחת לוח בקרת חיבורי הרשת") {
-            if (Build.VERSION.SDK_INT >= 29) openSettings("android.settings.panel.action.INTERNET_CONNECTIVITY")
-            else openSettings(Settings.ACTION_WIFI_SETTINGS)
-        }
-        actionRow("Bluetooth", "ניהול חיבורי Bluetooth") {
-            if (Build.VERSION.SDK_INT >= 29) openSettings("android.settings.panel.action.BLUETOOTH")
-            else openSettings(Settings.ACTION_BLUETOOTH_SETTINGS)
-        }
-        actionRow("נקודה חמה", "הגדרות שיתוף אינטרנט") {
-            openSettings(Settings.ACTION_TETHER_SETTINGS)
-        }
-        actionRow("מיקום", "הגדרות שירותי מיקום") {
-            openSettings(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
-        }
-        actionRow("NFC", "הגדרות תקשורת לטווח קצר") {
-            openSettings(Settings.ACTION_NFC_SETTINGS)
-        }
-        actionRow("חיסכון בנתונים", "הגדרות שימוש בנתונים") {
-            openSettings(Settings.ACTION_DATA_USAGE_SETTINGS)
-        }
-
-        section("הרשאות והגדרות מתקדמות")
-        actionRow("הדרכה: הרשאת WRITE_SECURE_SETTINGS", "הצגת פקודת ADB והסבר") {
-            showSecureSettingsGuide()
-        }
-        actionRow("הרשאת שינוי הגדרות מערכת", "נדרשת לבהירות, סיבוב מסך וחלק מההגדרות") {
-            requestWriteSettingsAccess()
-        }
-        actionRow("הרשאת מדיניות נא לא להפריע", "נדרשת לשליטה ישירה במצב נא לא להפריע") {
-            openSettings(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-        }
-        text(root, "הערה: Android מגבילה חלק מהפעולות לאפליקציות רגילות. כאשר שינוי ישיר אינו מותר, האפליקציה פותחת את מסך ההגדרה המתאים.", 12, muted)
-    }
-
-    private fun section(title: String) {
-        spacer(root, 20)
-        text(root, title, 18, ink, true)
-        spacer(root, 8)
-    }
-
-    private fun brightnessControl() {
-        val card = card()
-        text(card, "בהירות מסך", 16, ink, true)
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val value = text(row, "—", 13, muted)
-        val seek = SeekBar(this).apply { max = 255 }
-        row.addView(seek, LinearLayout.LayoutParams(0, dp(42), 1f))
-        card.addView(row)
-        val canWrite = Settings.System.canWrite(this)
-        val current = Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128)
-        seek.progress = current
-        value.text = "$current"
-        seek.isEnabled = canWrite
-        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
-                value.text = "$progress"
-                if (fromUser && Settings.System.canWrite(this@MainActivity)) {
-                    Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, progress)
-                }
-            }
-            override fun onStartTrackingTouch(bar: SeekBar?) {}
-            override fun onStopTrackingTouch(bar: SeekBar?) {}
-        })
-        if (!canWrite) button(card, "מתן הרשאה לשינוי הגדרות מערכת") { requestWriteSettingsAccess() }
-        root.addView(card)
-    }
-
-    private fun rotationControl() {
-        val card = card()
-        val enabled = Settings.System.getInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0) == 1
-        switchRow(card, "סיבוב מסך אוטומטי", enabled, Settings.System.canWrite(this)) { checked ->
-            if (Settings.System.canWrite(this)) {
-                Settings.System.putInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, if (checked) 1 else 0)
-            } else {
-                requestWriteSettingsAccess()
-            }
-        }
-        if (!Settings.System.canWrite(this)) button(card, "נדרשת הרשאת שינוי הגדרות מערכת") { requestWriteSettingsAccess() }
-        root.addView(card)
-    }
-
-    private fun volumeControl(label: String, stream: Int) {
-        val card = card()
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val current = audio.getStreamVolume(stream)
-        val max = audio.getStreamMaxVolume(stream).coerceAtLeast(1)
-        text(row, label, 15, ink, true)
-        val value = text(row, "$current/$max", 12, muted)
-        card.addView(row)
-        val seek = SeekBar(this).apply {
-            this.max = max
-            progress = current
-        }
-        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    audio.setStreamVolume(stream, progress, 0)
-                    value.text = "$progress/$max"
-                }
-            }
-            override fun onStartTrackingTouch(bar: SeekBar?) {}
-            override fun onStopTrackingTouch(bar: SeekBar?) {}
-        })
-        card.addView(seek)
-        root.addView(card)
-    }
-
-    private fun ringerControl() {
-        val card = card()
-        val modes = listOf(
-            "צלצול" to AudioManager.RINGER_MODE_NORMAL,
-            "רטט" to AudioManager.RINGER_MODE_VIBRATE,
-            "שקט" to AudioManager.RINGER_MODE_SILENT
+        heading("כלים")
+        torchCard()
+        capabilityCard(
+            "חיסכון בסוללה",
+            "Android אינה מאפשרת לאפליקציה רגילה להפעיל או לכבות מצב חיסכון בסוללה. אפשר להציג את המצב בלבד."
         )
-        text(card, "מצב צלצול", 15, ink, true)
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        modes.forEach { (label, mode) ->
-            val b = Button(this).apply {
-                text = label
-                isAllCaps = false
-                setOnClickListener {
-                    try {
-                        audio.ringerMode = mode
-                        Toast.makeText(this@MainActivity, "מצב: $label", Toast.LENGTH_SHORT).show()
-                    } catch (_: SecurityException) {
-                        Toast.makeText(this@MainActivity, "אין הרשאה לשינוי מצב הצלצול במכשיר זה", Toast.LENGTH_LONG).show()
-                    }
-                }
-            }
-            row.addView(b, LinearLayout.LayoutParams(0, dp(48), 1f))
-        }
-        card.addView(row)
-        root.addView(card)
+        capabilityCard(
+            "Wi-Fi, Bluetooth, נקודה חמה, מיקום ו-NFC",
+            "בגרסאות Android מודרניות, אפליקציה רגילה אינה רשאית להפעיל ולכבות את רוב המתגים האלה ישירות. הרשאות רגילות אינן מסירות את ההגבלה."
+        )
+
+        heading("הרשאות")
+        secureSettingsCard()
+        capabilityCard(
+            "הרשאות מערכת נוספות",
+            "WRITE_SETTINGS וגישת נא לא להפריע הן הרשאות מיוחדות שמחייבות אישור משתמש דרך Android. אין דרך תקנית לאשר אותן מתוך האפליקציה עצמה."
+        )
+        addText(
+            "האפליקציה לא תפתח מסכי מערכת. פעולות שאינן מותרות לאפליקציה רגילה יוצגו כלא זמינות, ולא יעמידו פנים שהשינוי בוצע.",
+            12, secondary
+        )
     }
 
-    private fun dndControl() {
-        val card = card()
-        val granted = notificationManager.isNotificationPolicyAccessGranted
-        val active = notificationManager.currentInterruptionFilter == NotificationManager.INTERRUPTION_FILTER_NONE
-        switchRow(card, "נא לא להפריע", active, granted) { checked ->
-            if (!notificationManager.isNotificationPolicyAccessGranted) {
-                openSettings(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-            } else {
-                notificationManager.setInterruptionFilter(
-                    if (checked) NotificationManager.INTERRUPTION_FILTER_NONE
-                    else NotificationManager.INTERRUPTION_FILTER_ALL
-                )
-            }
-        }
-        if (!granted) button(card, "הענקת גישה למדיניות התראות") {
-            openSettings(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-        }
-        root.addView(card)
+    private fun heading(label: String) {
+        gap(18)
+        addText(label, 17, dark, true)
+        gap(7)
     }
 
-    private fun torchControl() {
-        val card = card()
-        switchRow(card, "פנס", torchOn, torchCameraId != null) { checked ->
-            val id = torchCameraId
-            if (id == null) {
-                Toast.makeText(this, "לא נמצא פנס במכשיר", Toast.LENGTH_SHORT).show()
-            } else if (Build.VERSION.SDK_INT >= 23 &&
-                checkSelfPermission(android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(android.Manifest.permission.CAMERA), 410)
-            } else {
-                try {
-                    cameraManager.setTorchMode(id, checked)
-                    torchOn = checked
-                } catch (e: Exception) {
-                    Toast.makeText(this, "לא ניתן לשנות את מצב הפנס: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-        root.addView(card)
-    }
-
-    private fun batterySaverControl() {
-        val card = card()
-        val power = getSystemService(POWER_SERVICE) as PowerManager
-        text(card, if (power.isPowerSaveMode) "חיסכון בסוללה פעיל" else "חיסכון בסוללה אינו פעיל", 15, ink, true)
-        button(card, "פתיחת הגדרות חיסכון בסוללה") {
-            openSettings(if (Build.VERSION.SDK_INT >= 29) Settings.ACTION_BATTERY_SAVER_SETTINGS else Settings.ACTION_SETTINGS)
-        }
-        root.addView(card)
-    }
-
-    private fun actionRow(title: String, subtitle: String, action: () -> Unit) {
-        val card = card()
-        text(card, title, 15, ink, true)
-        text(card, subtitle, 12, muted)
-        button(card, "פתיחה") { action() }
-        root.addView(card)
-    }
-
-    private fun switchRow(parent: LinearLayout, label: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+    private fun card(): LinearLayout {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
+            setPadding(dp(14), dp(11), dp(14), dp(11))
+            setBackgroundColor(cardColor)
+            elevation = dp(1).toFloat()
         }
-        val labelView = text(row, label, 15, ink, true)
-        labelView.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        val toggle = Switch(this).apply {
-            isChecked = checked
-            isEnabled = enabled
-            setOnCheckedChangeListener { _, isChecked -> onChange(isChecked) }
-        }
-        row.addView(toggle)
-        parent.addView(row)
+        val p = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        p.bottomMargin = dp(8)
+        page.addView(box, p)
+        return box
     }
 
-    private fun card(): LinearLayout = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        layoutDirection = View.LAYOUT_DIRECTION_RTL
-        setPadding(dp(15), dp(12), dp(15), dp(12))
-        setBackgroundColor(surface)
-        elevation = dp(1).toFloat()
-        val params = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        params.bottomMargin = dp(9)
-        layoutParams = params
-    }
-
-    private fun text(parent: LinearLayout, value: String, size: Int, color: Int, bold: Boolean = false): TextView {
-        val view = TextView(this).apply {
+    private fun addText(value: String, size: Int, color: Int, bold: Boolean = false): TextView {
+        val v = TextView(this).apply {
             text = value
             textSize = size.toFloat()
             setTextColor(color)
@@ -327,83 +133,190 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(3), 0, dp(3))
         }
-        parent.addView(view)
-        return view
+        page.addView(v)
+        return v
     }
 
-    private fun button(parent: LinearLayout, label: String, action: () -> Unit) {
-        val b = Button(this).apply {
-            text = label
-            isAllCaps = false
-            setTextColor(blue)
-            setOnClickListener { action() }
-        }
-        parent.addView(b, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
-    }
-
-    private fun spacer(parent: LinearLayout, height: Int) {
-        parent.addView(View(this), LinearLayout.LayoutParams(1, dp(height)))
-    }
-
-    private fun refreshDynamicControls() {
-        // The screen is rebuilt on resume so permission changes and external system changes are reflected.
-        if (!refreshing) {
-            refreshing = true
-            val y = (findViewById<ScrollView>(android.R.id.content)?.scrollY) ?: 0
-            buildScreen()
-            refreshing = false
+    private fun textIn(parent: LinearLayout, value: String, size: Int, color: Int, bold: Boolean = false): TextView {
+        return TextView(this).apply {
+            text = value
+            textSize = size.toFloat()
+            setTextColor(color)
+            if (bold) setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(0, dp(2), 0, dp(2))
+            parent.addView(this)
         }
     }
 
-    private fun findBackCameraWithFlash(): String? {
-        return try {
-            cameraManager.cameraIdList.firstOrNull { id ->
-                val c = cameraManager.getCameraCharacteristics(id)
-                c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK &&
-                    c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
-            } ?: cameraManager.cameraIdList.firstOrNull { id ->
-                cameraManager.getCameraCharacteristics(id).get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+    private fun gap(h: Int) {
+        page.addView(View(this), LinearLayout.LayoutParams(1, dp(h)))
+    }
+
+    private fun brightnessCard() {
+        val c = card()
+        textIn(c, "בהירות מסך", 15, dark, true)
+        val canWrite = Settings.System.canWrite(this)
+        val value = Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128)
+        val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val number = TextView(this).apply { text = value.toString(); setTextColor(secondary); textSize = 12f }
+        val seek = SeekBar(this).apply { max = 255; progress = value; isEnabled = canWrite }
+        line.addView(seek, LinearLayout.LayoutParams(0, dp(42), 1f))
+        line.addView(number)
+        c.addView(line)
+        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, user: Boolean) {
+                number.text = p.toString()
+                if (user && Settings.System.canWrite(this@MainActivity)) {
+                    Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, p)
+                }
             }
-        } catch (_: Exception) { null }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+        if (!canWrite) textIn(c, "לא זמין: נדרשת הרשאת שינוי הגדרות מערכת (WRITE_SETTINGS).", 12, secondary)
     }
 
-    private fun openSettings(action: String) {
-        try {
-            startActivity(Intent(action))
-        } catch (_: Exception) {
-            startActivity(Intent(Settings.ACTION_SETTINGS))
+    private fun rotationCard() {
+        val c = card()
+        val allowed = Settings.System.canWrite(this)
+        val enabled = Settings.System.getInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0) == 1
+        switch(c, "סיבוב מסך אוטומטי", enabled, allowed) { checked ->
+            Settings.System.putInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, if (checked) 1 else 0)
         }
+        if (!allowed) textIn(c, "לא זמין: נדרשת הרשאת WRITE_SETTINGS.", 12, secondary)
     }
 
-    private fun requestWriteSettingsAccess() {
-        if (Build.VERSION.SDK_INT >= 23) {
-            val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
-                data = android.net.Uri.parse("package:$packageName")
+    private fun darkModeCard() {
+        val c = card()
+        val manager = getSystemService(UI_MODE_SERVICE) as UiModeManager
+        val isDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        switch(c, "ערכת נושא כהה של האפליקציה", isDark, Build.VERSION.SDK_INT >= 31) { checked ->
+            if (Build.VERSION.SDK_INT >= 31) {
+                manager.setApplicationNightMode(if (checked) UiModeManager.MODE_NIGHT_YES else UiModeManager.MODE_NIGHT_NO)
             }
-            startActivity(intent)
         }
+        textIn(c, "המתג משנה את מראה Quick Control בלבד. שינוי ערכת הנושא של כל המכשיר חסום לאפליקציה רגילה.", 12, secondary)
     }
 
-    private fun showSecureSettingsGuide() {
+    private fun volumeCard(label: String, stream: Int) {
+        val c = card()
+        val max = audio.getStreamMaxVolume(stream).coerceAtLeast(1)
+        val current = audio.getStreamVolume(stream)
+        textIn(c, label, 14, dark, true)
+        val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val number = TextView(this).apply { text = "$current/$max"; setTextColor(secondary); textSize = 12f }
+        val seek = SeekBar(this).apply { this.max = max; progress = current }
+        line.addView(seek, LinearLayout.LayoutParams(0, dp(40), 1f))
+        line.addView(number)
+        c.addView(line)
+        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, user: Boolean) {
+                if (user) {
+                    audio.setStreamVolume(stream, p, 0)
+                    number.text = "$p/$max"
+                }
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+    }
+
+    private fun ringerCard() {
+        val c = card()
+        textIn(c, "מצב צלצול", 14, dark, true)
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf("צלצול" to AudioManager.RINGER_MODE_NORMAL, "רטט" to AudioManager.RINGER_MODE_VIBRATE, "שקט" to AudioManager.RINGER_MODE_SILENT)
+            .forEach { (label, mode) ->
+                val b = Button(this).apply {
+                    text = label
+                    isAllCaps = false
+                    setOnClickListener {
+                        try { audio.ringerMode = mode }
+                        catch (_: SecurityException) { toast("המערכת חסמה שינוי מצב צלצול") }
+                    }
+                }
+                row.addView(b, LinearLayout.LayoutParams(0, dp(46), 1f))
+            }
+        c.addView(row)
+    }
+
+    private fun dndCard() {
+        val c = card()
+        val granted = notifications.isNotificationPolicyAccessGranted
+        val active = notifications.currentInterruptionFilter == NotificationManager.INTERRUPTION_FILTER_NONE
+        switch(c, "נא לא להפריע", active, granted) { checked ->
+            if (notifications.isNotificationPolicyAccessGranted) {
+                notifications.setInterruptionFilter(
+                    if (checked) NotificationManager.INTERRUPTION_FILTER_NONE
+                    else NotificationManager.INTERRUPTION_FILTER_ALL
+                )
+            }
+        }
+        if (!granted) textIn(c, "לא זמין: נדרשת גישת מדיניות התראות. יש לאשר אותה מראש במערכת.", 12, secondary)
+    }
+
+    private fun torchCard() {
+        val c = card()
+        val id = torchId
+        switch(c, "פנס", torchEnabled, id != null) { checked ->
+            if (id == null) return@switch
+            if (checkSelfPermission(android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.CAMERA), 410)
+            } else {
+                try {
+                    camera.setTorchMode(id, checked)
+                    torchEnabled = checked
+                } catch (_: Exception) { toast("לא ניתן לשנות את מצב הפנס") }
+            }
+        }
+        if (id == null) textIn(c, "במכשיר לא זוהה פנס LED.", 12, secondary)
+    }
+
+    private fun capabilityCard(title: String, explanation: String) {
+        val c = card()
+        textIn(c, title, 14, dark, true)
+        textIn(c, explanation, 12, secondary)
+    }
+
+    private fun secureSettingsCard() {
+        val c = card()
+        textIn(c, "WRITE_SECURE_SETTINGS", 14, dark, true)
+        textIn(c, "ההרשאה ניתנת באמצעות ADB. היא אינה מעניקה הרשאות מערכת חתומות ואינה עוקפת את מגבלות Android על Wi-Fi, חיסכון בסוללה, מצב כהה גלובלי או מתגים מוגנים אחרים.", 12, secondary)
         val command = "adb shell pm grant $packageName android.permission.WRITE_SECURE_SETTINGS"
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val message = "הרשאת WRITE_SECURE_SETTINGS אינה הרשאת Android רגילה ולכן לא ניתן לבקש אותה בחלון הרשאות רגיל.\n\n" +
-            "1. הפעילו אפשרויות למפתחים במכשיר.\n" +
-            "2. הפעילו ניפוי USB.\n" +
-            "3. חברו את המכשיר למחשב עם ADB ואשרו את טביעת המפתח.\n" +
-            "4. הריצו את הפקודה הבאה:\n\n$command\n\n" +
-            "5. נתקו וחזרו לאפליקציה.\n\n" +
-            "הפקודה מעניקה רק את ההרשאה הזו. היא אינה עוקפת הרשאות מיוחדות אחרות או מגבלות של יצרן המכשיר."
-        android.app.AlertDialog.Builder(this)
-            .setTitle("הפעלת WRITE_SECURE_SETTINGS")
-            .setMessage(message)
-            .setPositiveButton("העתקת פקודה") { _, _ ->
-                clipboard.setPrimaryClip(ClipData.newPlainText("ADB command", command))
-                Toast.makeText(this, "הפקודה הועתקה", Toast.LENGTH_SHORT).show()
+        val b = Button(this).apply {
+            text = "העתקת פקודת ADB"
+            isAllCaps = false
+            setOnClickListener {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("ADB", command))
+                toast("הפקודה הועתקה")
             }
-            .setNegativeButton("סגירה", null)
-            .show()
+        }
+        c.addView(b)
     }
 
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+    private fun switch(parent: LinearLayout, label: String, checked: Boolean, enabled: Boolean, action: (Boolean) -> Unit) {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val title = textIn(row, label, 14, dark, true)
+        title.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        val control = Switch(this).apply {
+            isChecked = checked
+            isEnabled = enabled
+            setOnCheckedChangeListener { _, value -> action(value) }
+        }
+        row.addView(control)
+        parent.addView(row)
+    }
+
+    private fun findFlashCamera(): String? = try {
+        camera.cameraIdList.firstOrNull { id ->
+            val info = camera.getCameraCharacteristics(id)
+            info.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK &&
+                info.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+        }
+    } catch (_: Exception) { null }
+
+    private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
