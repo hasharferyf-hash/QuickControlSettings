@@ -1,39 +1,56 @@
 # QuickControlSettings
 
-A compact Hebrew Android dashboard for everyday device controls.
+A compact Hebrew Android dashboard for direct device controls.
 
-## Direct controls currently implemented
+## Permission strategy
 
-- Screen brightness, when Android's special Modify System Settings access has already been granted.
-- Media, ring, notification and alarm volume.
-- Ringer mode: normal, vibrate and silent.
-- Flashlight, after granting the camera permission.
-- Auto-rotate, when Modify System Settings access has already been granted.
-- Do Not Disturb, when Notification Policy Access has already been granted.
-- App-local dark appearance (does not change the whole device theme).
+The manifest declares the standard and special permissions that may be useful for the implemented controls and planned Wi-Fi, Bluetooth, location and NFC features. Runtime permissions should be requested only when the user invokes a feature that needs them; the app must not request an unrelated bundle of permissions at startup.
 
-The app intentionally does not open Android Settings screens. If Android does not permit a control for an ordinary third-party app, the dashboard explains that limitation instead of navigating away or claiming success.
+### ADB-grantable permission
 
-## Android platform limitations
-
-Adding permissions to the manifest does not grant privileged access. In particular:
-
-- `WRITE_SECURE_SETTINGS` is a signature/development permission and can be granted with ADB on supported builds. It is not a universal system-control permission.
-- `WRITE_SETTINGS` requires the user to grant special access outside the app. It is distinct from `WRITE_SECURE_SETTINGS`.
-- Do Not Disturb requires Notification Policy Access, also granted by the user outside the app.
-- Modern Android restricts ordinary apps from toggling several global controls (including Battery Saver, Wi-Fi, global dark theme, location and some Bluetooth/NFC operations). Device Owner, privileged/system-app status, or root may be required depending on the operation and Android version.
-
-The app does not attempt to bypass these platform security boundaries.
-
-## ADB setup
-
-For the development permission, connect the device with USB debugging enabled and run:
+With USB debugging enabled, run:
 
 ```sh
 adb shell pm grant QuickControlSettings.brisker.AI android.permission.WRITE_SECURE_SETTINGS
 ```
 
-This does not automatically grant `WRITE_SETTINGS`, Notification Policy Access, or privileged platform permissions.
+This is a development-level permission and is grantable through ADB on supported builds. It does not make the app a privileged/system app.
+
+### Permissions that need a different grant path
+
+- `WRITE_SETTINGS`: special app access. It is not granted by `pm grant`.
+- `ACCESS_NOTIFICATION_POLICY`: Notification Policy Access; it is not granted by `pm grant`.
+- `CAMERA`, `BLUETOOTH_CONNECT`, `BLUETOOTH_SCAN`, `NEARBY_WIFI_DEVICES`, and location permissions: runtime permissions, where applicable.
+- `ACCESS_BACKGROUND_LOCATION`: subject to Android's separate background-location approval rules.
+
+The app is intentionally designed not to open Android Settings screens. If a required special access has not already been provisioned, the related control remains unavailable and explains why.
+
+## Device Owner compatibility
+
+QuickControlSettings does **not** request or become Device Owner. It is intended to run alongside an already-enrolled Device Owner / DPC app.
+
+Important: Device Owner privileges belong to the package that Android has designated as Device Owner. They are not inherited by other apps installed on the same device. If another DPC is Device Owner, QuickControlSettings cannot call that DPC's privileged DevicePolicyManager operations merely because Device Owner is active. To expose those capabilities inside this app, the DPC would need to provide an explicit, authenticated management interface, or QuickControlSettings would need to be granted the relevant privileged/system status by the device firmware.
+
+## Android platform limitations
+
+Declaring a permission is not the same as receiving it, and receiving a permission does not override API-level restrictions.
+
+- Modern Android restricts ordinary apps from enabling/disabling Wi-Fi, Bluetooth, Location, Battery Saver, global dark theme and other protected system controls.
+- Wi-Fi and Bluetooth permissions can allow discovery, connection or communication in supported cases; they do not generally authorize toggling the system radios.
+- `WRITE_SECURE_SETTINGS` is not a universal system-control permission.
+- `WRITE_SETTINGS` and Notification Policy Access require separate special access.
+- Device Owner, privileged/system-app status, OEM APIs or root may be required for particular global operations, depending on Android version and firmware.
+
+## Current direct controls
+
+- Screen brightness and auto-rotate, when `WRITE_SETTINGS` access is already available.
+- Media, ring, notification and alarm volume.
+- Ringer mode.
+- Flashlight, after CAMERA runtime permission is granted.
+- Do Not Disturb, after Notification Policy Access is granted.
+- App-local dark appearance only.
+
+The current UI does not yet implement Wi-Fi, Bluetooth, Location, NFC or Battery Saver controls. Their manifest permissions are declared for future implementation where Android permits it; they do not imply those controls can be toggled on every device.
 
 ## Build
 
