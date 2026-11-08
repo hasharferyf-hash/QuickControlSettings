@@ -103,10 +103,10 @@ class MainActivity : Activity() {
         secureSettingsCard()
         capabilityCard(
             "הרשאות מערכת נוספות",
-            "הרשאות runtime יידרשו לפי הצורך. WRITE_SETTINGS וגישת נא לא להפריע הן הרשאות מיוחדות שאינן ניתנות באמצעות pm grant רגיל. האפליקציה לא תפתח מסכי מערכת; יש להעניק אותן מראש באמצעות תהליך provisioning או ADB/AppOps מתאים, אם גרסת המכשיר מאפשרת זאת."
+            "הרשאות runtime מתבקשות בעת הפעלת התכונה. הרשאות מיוחדות כמו WRITE_SETTINGS וגישת נא לא להפריע פותחות בלחיצה אחת את מסך ההגדרה המתאים. WRITE_SECURE_SETTINGS אינה ניתנת לאישור ידני במסך רגיל ודורשת ADB."
         )
         addText(
-            "האפליקציה לא תפתח מסכי מערכת. פעולות שאינן מותרות לאפליקציה רגילה יוצגו כלא זמינות, ולא יעמידו פנים שהשינוי בוצע.",
+            "כאשר חסרה הרשאה, יוצג כפתור לפתיחת מסך ההרשאה המתאים או לבקשת הרשאת runtime. הרשאות שאינן ניתנות לאישור דרך ממשק המכשיר, כגון WRITE_SECURE_SETTINGS, יוסברו בנפרד.",
             12, secondary
         )
     }
@@ -295,6 +295,9 @@ class MainActivity : Activity() {
             }
         }
         if (id == null) textIn(c, "במכשיר לא זוהה פנס LED.", 12, secondary)
+        else if (checkSelfPermission(android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            permissionButton(c, "פתיחת הגדרות הרשאת מצלמה") { openAppDetails() }
+        }
     }
 
 
@@ -499,9 +502,15 @@ class MainActivity : Activity() {
         try {
             startActivity(intent)
         } catch (_: Exception) {
-            try {
-                openAppDetails()
-            } catch (_: Exception) {
+            if (intent.action != Settings.ACTION_APPLICATION_DETAILS_SETTINGS) {
+                try {
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:$packageName")
+                    })
+                } catch (_: Exception) {
+                    toast("לא ניתן לפתוח את מסך ההרשאה במכשיר הזה")
+                }
+            } else {
                 toast("לא ניתן לפתוח את מסך ההרשאה במכשיר הזה")
             }
         }
