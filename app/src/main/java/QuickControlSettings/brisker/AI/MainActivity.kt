@@ -70,14 +70,13 @@ class MainActivity : Activity() {
         scroll.addView(page)
         setContentView(scroll)
 
-        addText("Quick Control", 25, dark, true)
-        addText("שליטה מהירה בהגדרות המכשיר", 13, secondary)
+        topBar()
         gap(16)
 
         heading("תצוגה")
         brightnessCard()
         rotationCard()
-        darkModeCard()
+        globalDarkModeCard()
 
         heading("צלילים")
         volumeCard("מדיה", AudioManager.STREAM_MUSIC)
@@ -203,17 +202,90 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun darkModeCard() {
-        val c = card()
-        val manager = getSystemService(UI_MODE_SERVICE) as UiModeManager
-        val isDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+    private fun isAppDark(): Boolean =
+        (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
-        switch(c, "ערכת נושא כהה של האפליקציה", isDark, Build.VERSION.SDK_INT >= 31) { checked ->
-            if (Build.VERSION.SDK_INT >= 31) {
-                manager.setApplicationNightMode(if (checked) UiModeManager.MODE_NIGHT_YES else UiModeManager.MODE_NIGHT_NO)
+
+    // App-only appearance control: shown as an icon at the upper-left of the RTL toolbar.
+    private fun topBar() {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val titleGroup = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
+        }
+        textIn(titleGroup, "Quick Control", 25, dark, true)
+        textIn(titleGroup, "שליטה מהירה בהגדרות המכשיר", 13, secondary)
+        row.addView(titleGroup, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+        val themeButton = MaterialButton(this).apply {
+            text = if (isAppDark()) "☀" else "☾"
+            textSize = 23f
+            isAllCaps = false
+            contentDescription = if (isAppDark()) "מעבר למצב בהיר באפליקציה" else "מעבר למצב כהה באפליקציה"
+            minWidth = dp(48)
+            minimumWidth = dp(48)
+            minimumHeight = dp(48)
+            setPadding(0, 0, 0, 0)
+            cornerRadius = dp(24)
+            setOnClickListener {
+                if (Build.VERSION.SDK_INT >= 31) {
+                    val manager = getSystemService(UI_MODE_SERVICE) as UiModeManager
+                    manager.setApplicationNightMode(
+                        if (isAppDark()) UiModeManager.MODE_NIGHT_NO else UiModeManager.MODE_NIGHT_YES
+                    )
+                } else {
+                    toast("שינוי ערכת נושא מתוך האפליקציה דורש Android 12 ומעלה")
+                }
             }
         }
-        textIn(c, "המתג משנה את מראה Quick Control בלבד. שינוי ערכת הנושא של כל המכשיר חסום לאפליקציה רגילה.", 12, secondary)
+        val buttonParams = LinearLayout.LayoutParams(dp(48), dp(48))
+        buttonParams.marginStart = dp(8)
+        row.addView(themeButton, buttonParams)
+        page.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+
+    private fun globalDarkModeCard() {
+        val c = card()
+        val granted = hasSecureSettings()
+        val isDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        switch(c, "ערכת נושא כהה של המכשיר", isDark, granted, onPermissionMissing = { secureSettingsHelp() }) { checked ->
+            try {
+                val mode = if (checked) UiModeManager.MODE_NIGHT_YES else UiModeManager.MODE_NIGHT_NO
+                val written = Settings.Secure.putInt(contentResolver, "ui_night_mode", mode)
+                if (!written) {
+                    toast("כתיבת מצב התצוגה נכשלה")
+                    render()
+                } else {
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        val savedMode = Settings.Secure.getInt(contentResolver, "ui_night_mode", -1)
+                        val activeDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                            android.content.res.Configuration.UI_MODE_NIGHT_YES
+                        if (savedMode == mode && activeDark == checked) {
+                            toast(if (checked) "מצב כהה הופעל במכשיר" else "מצב בהיר הופעל במכשיר")
+                        } else {
+                            toast("ההגדרה נכתבה, אך Android או ממשק היצרן לא החילו את השינוי")
+                        }
+                        render()
+                    }, 700)
+                }
+            } catch (_: SecurityException) {
+                toast("נדרשת הרשאת WRITE_SECURE_SETTINGS")
+                render()
+            } catch (_: Exception) {
+                toast("לא ניתן לשנות את ערכת הנושא הגלובלית במכשיר זה")
+                render()
+            }
+        }
+        textIn(c, "משנה את מצב התצוגה של Android כולו, כולל ממשק המערכת ואפליקציות שתומכות בערכת נושא כהה. הפעולה דורשת WRITE_SECURE_SETTINGS; ייתכן שממשק יצרן מסוים יתעלם ממנה.", 12, secondary)
+        if (!granted) {
+            textIn(c, "יש להעניק WRITE_SECURE_SETTINGS באמצעות ADB כדי להפעיל את המתג.", 12, secondary)
+            permissionButton(c, "העתקת פקודת ADB") { secureSettingsHelp() }
+        }
     }
 
     private fun volumeCard(label: String, stream: Int) {
