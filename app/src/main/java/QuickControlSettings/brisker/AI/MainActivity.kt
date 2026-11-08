@@ -24,7 +24,6 @@ import android.graphics.drawable.GradientDrawable
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
-import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 
@@ -236,7 +235,7 @@ class MainActivity : Activity() {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf("צלצול" to AudioManager.RINGER_MODE_NORMAL, "רטט" to AudioManager.RINGER_MODE_VIBRATE, "שקט" to AudioManager.RINGER_MODE_SILENT)
             .forEach { (label, mode) ->
-                val b = Button(this).apply {
+                val b = MaterialButton(this).apply {
                     text = label
                     isAllCaps = false
                     setOnClickListener {
