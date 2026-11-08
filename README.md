@@ -52,7 +52,9 @@ Declaring a permission is not the same as receiving it, and receiving a permissi
 - Do Not Disturb, after Notification Policy Access is granted.
 - Battery Saver through `Settings.Global` with `WRITE_SECURE_SETTINGS`, with the actual state checked through `PowerManager`.
 - System animation scales and stay-awake-while-charging through `Settings.Global`, with `WRITE_SECURE_SETTINGS`.
-- App-local dark appearance only.
+- App-local dark appearance, with conventional sun/moon icons.
+- An About dialog with developer credit.
+- Screen timeout selection from a clear list of available durations.
 
 The current UI does not yet implement direct Wi-Fi, Bluetooth, Location or NFC toggles. Their manifest permissions are declared for future implementation where Android permits it; they do not imply those controls can be toggled on every device.
 
