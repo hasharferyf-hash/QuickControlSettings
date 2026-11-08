@@ -38,7 +38,7 @@ class MainActivity : Activity() {
     private var torchEnabled = false
     private val dark get() = com.google.android.material.color.MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurface, Color.BLACK)
     private val secondary get() = com.google.android.material.color.MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurfaceVariant, Color.DKGRAY)
-    private val accent get() = com.google.android.material.color.MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary, Color.BLUE)
+    private val accent get() = com.google.android.material.color.MaterialColors.getColor(this, android.R.attr.colorAccent, Color.BLUE)
     private val cardColor get() = com.google.android.material.color.MaterialColors.getColor(this, com.google.android.material.R.attr.colorSurfaceContainerLow, Color.WHITE)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -410,7 +410,7 @@ class MainActivity : Activity() {
             adb shell appops set $packageName WRITE_SETTINGS allow
             adb shell cmd notification allow_dnd $packageName
         """.trimIndent()
-        val b = Button(this).apply {
+        val b = MaterialButton(this).apply {
             text = "העתקת פקודת ADB"
             isAllCaps = false
             setOnClickListener {
