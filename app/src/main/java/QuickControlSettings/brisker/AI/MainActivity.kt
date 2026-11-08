@@ -310,8 +310,10 @@ class MainActivity : Activity() {
                 }
             } catch (_: SecurityException) {
                 toast("נדרשת הרשאת WRITE_SECURE_SETTINGS")
+                render()
             } catch (_: Exception) {
                 toast("לא ניתן לשנות את מצב חיסכון בסוללה במכשיר זה")
+                render()
             }
         }
         textIn(c, "נכתב דרך Settings.Global (low_power), והמצב נבדק דרך PowerManager. ייתכן שמדיניות היצרן תחסום את הפעולה.", 12, secondary)
