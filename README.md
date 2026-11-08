@@ -65,3 +65,8 @@ Open the project in Android Studio with JDK 17 and Android SDK 35.
 ## License
 
 GNU General Public License v3.0. See [LICENSE](LICENSE).
+
+
+## Continuous integration
+
+GitHub Actions builds the debug APK on pushes to `main` and pull requests targeting `main`. The generated APK is uploaded as the `QuickControlSettings-debug` workflow artifact.
