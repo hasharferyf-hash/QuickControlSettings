@@ -143,7 +143,6 @@ class MainActivity : Activity() {
         val value = text(row, "—", 13, muted)
         val seek = SeekBar(this).apply { max = 255 }
         row.addView(seek, LinearLayout.LayoutParams(0, dp(42), 1f))
-        row.addView(value, LinearLayout.LayoutParams(dp(48), ViewGroup.LayoutParams.WRAP_CONTENT))
         card.addView(row)
         val canWrite = Settings.System.canWrite(this)
         val current = Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128)
@@ -185,7 +184,6 @@ class MainActivity : Activity() {
         val max = audio.getStreamMaxVolume(stream).coerceAtLeast(1)
         text(row, label, 15, ink, true)
         val value = text(row, "$current/$max", 12, muted)
-        row.addView(value)
         card.addView(row)
         val seek = SeekBar(this).apply {
             this.max = max
@@ -259,6 +257,9 @@ class MainActivity : Activity() {
             val id = torchCameraId
             if (id == null) {
                 Toast.makeText(this, "לא נמצא פנס במכשיר", Toast.LENGTH_SHORT).show()
+            } else if (Build.VERSION.SDK_INT >= 23 &&
+                checkSelfPermission(android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.CAMERA), 410)
             } else {
                 try {
                     cameraManager.setTorchMode(id, checked)
