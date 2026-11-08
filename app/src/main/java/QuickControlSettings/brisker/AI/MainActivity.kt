@@ -6,6 +6,8 @@ import android.app.UiModeManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.hardware.camera2.CameraCharacteristics
@@ -182,17 +184,23 @@ class MainActivity : Activity() {
             override fun onStartTrackingTouch(s: SeekBar?) {}
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
-        if (!canWrite) textIn(c, "לא זמין: נדרשת הרשאת שינוי הגדרות מערכת (WRITE_SETTINGS).", 12, secondary)
+        if (!canWrite) {
+            textIn(c, "נדרשת הרשאת שינוי הגדרות מערכת.", 12, secondary)
+            permissionButton(c, "פתיחת הגדרות ההרשאה") { openWriteSettings() }
+        }
     }
 
     private fun rotationCard() {
         val c = card()
         val allowed = Settings.System.canWrite(this)
         val enabled = Settings.System.getInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0) == 1
-        switch(c, "סיבוב מסך אוטומטי", enabled, allowed) { checked ->
+        switch(c, "סיבוב מסך אוטומטי", enabled, allowed, onPermissionMissing = { openWriteSettings() }) { checked ->
             Settings.System.putInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, if (checked) 1 else 0)
         }
-        if (!allowed) textIn(c, "לא זמין: נדרשת הרשאת WRITE_SETTINGS.", 12, secondary)
+        if (!allowed) {
+            textIn(c, "נדרשת הרשאת WRITE_SETTINGS.", 12, secondary)
+            permissionButton(c, "פתיחת הגדרות ההרשאה") { openWriteSettings() }
+        }
     }
 
     private fun darkModeCard() {
@@ -254,7 +262,7 @@ class MainActivity : Activity() {
         val c = card()
         val granted = notifications.isNotificationPolicyAccessGranted
         val active = notifications.currentInterruptionFilter == NotificationManager.INTERRUPTION_FILTER_NONE
-        switch(c, "נא לא להפריע", active, granted) { checked ->
+        switch(c, "נא לא להפריע", active, granted, onPermissionMissing = { openNotificationPolicySettings() }) { checked ->
             if (notifications.isNotificationPolicyAccessGranted) {
                 notifications.setInterruptionFilter(
                     if (checked) NotificationManager.INTERRUPTION_FILTER_NONE
@@ -262,13 +270,20 @@ class MainActivity : Activity() {
                 )
             }
         }
-        if (!granted) textIn(c, "לא זמין: נדרשת גישת מדיניות התראות. יש לאשר אותה מראש במערכת.", 12, secondary)
+        if (!granted) {
+            textIn(c, "נדרשת גישת מדיניות התראות.", 12, secondary)
+            permissionButton(c, "פתיחת הגדרות נא לא להפריע") { openNotificationPolicySettings() }
+        }
     }
 
     private fun torchCard() {
         val c = card()
         val id = torchId
-        switch(c, "פנס", torchEnabled, id != null) { checked ->
+        switch(c, "פנס", torchEnabled, id != null, onPermissionMissing = {
+            if (checkSelfPermission(android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.CAMERA), 410)
+            } else openAppDetails()
+        }) { checked ->
             if (id == null) return@switch
             if (checkSelfPermission(android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(arrayOf(android.Manifest.permission.CAMERA), 410)
@@ -290,7 +305,7 @@ class MainActivity : Activity() {
         val c = card()
         val power = getSystemService(POWER_SERVICE) as PowerManager
         val granted = hasSecureSettings()
-        switch(c, "חיסכון בסוללה", power.isPowerSaveMode, granted) { checked ->
+        switch(c, "חיסכון בסוללה", power.isPowerSaveMode, granted, onPermissionMissing = { secureSettingsHelp() }) { checked ->
             try {
                 val written = Settings.Global.putInt(contentResolver, "low_power", if (checked) 1 else 0)
                 if (!written) {
@@ -317,7 +332,13 @@ class MainActivity : Activity() {
             }
         }
         textIn(c, "נכתב דרך Settings.Global (low_power), והמצב נבדק דרך PowerManager. ייתכן שמדיניות היצרן תחסום את הפעולה.", 12, secondary)
-        if (!granted) textIn(c, "יש להעניק WRITE_SECURE_SETTINGS באמצעות ADB.", 12, secondary)
+        if (!granted) {
+            textIn(c, "ההרשאה הזו אינה ניתנת לאישור ידני במסך ההגדרות הרגיל. יש להעניק אותה באמצעות ADB מהמחשב.", 12, secondary)
+            permissionButton(c, "העתקת פקודת הענקת הרשאה") {
+                copyToClipboard("adb shell pm grant $packageName android.permission.WRITE_SECURE_SETTINGS")
+                toast("פקודת ADB הועתקה")
+            }
+        }
     }
 
     private fun animationScaleCard() {
@@ -325,7 +346,7 @@ class MainActivity : Activity() {
         val keys = listOf("window_animation_scale", "transition_animation_scale", "animator_duration_scale")
         val granted = hasSecureSettings()
         val disabled = try { Settings.Global.getFloat(contentResolver, keys[0], 1f) == 0f } catch (_: Exception) { false }
-        switch(c, "ביטול אנימציות מערכת", disabled, granted) { checked ->
+        switch(c, "ביטול אנימציות מערכת", disabled, granted, onPermissionMissing = { secureSettingsHelp() }) { checked ->
             try {
                 val value = if (checked) 0f else 1f
                 val results = keys.map { Settings.Global.putFloat(contentResolver, it, value) }
@@ -341,7 +362,7 @@ class MainActivity : Activity() {
         val c = card()
         val granted = hasSecureSettings()
         val mask = try { Settings.Global.getInt(contentResolver, "stay_on_while_plugged_in", 0) } catch (_: Exception) { 0 }
-        switch(c, "השאר מסך דולק בזמן טעינה", mask != 0, granted) { checked ->
+        switch(c, "השאר מסך דולק בזמן טעינה", mask != 0, granted, onPermissionMissing = { secureSettingsHelp() }) { checked ->
             try {
                 Settings.Global.putInt(contentResolver, "stay_on_while_plugged_in", if (checked) 7 else 0)
             } catch (_: SecurityException) { toast("נדרשת WRITE_SECURE_SETTINGS") }
@@ -368,7 +389,10 @@ class MainActivity : Activity() {
             }
         }
         c.addView(button)
-        if (!allowed) textIn(c, "נדרשת WRITE_SETTINGS.", 12, secondary)
+        if (!allowed) {
+            textIn(c, "נדרשת הרשאת שינוי הגדרות מערכת.", 12, secondary)
+            permissionButton(c, "פתיחת הגדרות ההרשאה") { openWriteSettings() }
+        }
     }
 
     private fun timeoutLabel(ms: Int): String = when {
@@ -381,7 +405,7 @@ class MainActivity : Activity() {
         val c = card()
         val allowed = Settings.System.canWrite(this)
         val enabled = Settings.System.getInt(contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) == 1
-        switch(c, "משוב רטט למגע", enabled, allowed) { checked ->
+        switch(c, "משוב רטט למגע", enabled, allowed, onPermissionMissing = { openWriteSettings() }) { checked ->
             Settings.System.putInt(contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, if (checked) 1 else 0)
         }
     }
@@ -422,7 +446,14 @@ class MainActivity : Activity() {
         c.addView(b)
     }
 
-    private fun switch(parent: LinearLayout, label: String, checked: Boolean, enabled: Boolean, action: (Boolean) -> Unit) {
+    private fun switch(
+        parent: LinearLayout,
+        label: String,
+        checked: Boolean,
+        enabled: Boolean,
+        onPermissionMissing: (() -> Unit)? = null,
+        action: (Boolean) -> Unit
+    ) {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val title = textIn(row, label, 14, dark, true)
         title.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
@@ -433,6 +464,57 @@ class MainActivity : Activity() {
         }
         row.addView(control)
         parent.addView(row)
+        if (!enabled && onPermissionMissing != null) {
+            permissionButton(parent, "הענקת הרשאה / פתיחת הגדרות") { onPermissionMissing() }
+        }
+    }
+
+    private fun permissionButton(parent: LinearLayout, label: String, action: () -> Unit) {
+        val button = MaterialButton(this).apply {
+            text = label
+            isAllCaps = false
+            setOnClickListener { action() }
+        }
+        parent.addView(button, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+    }
+
+    private fun openWriteSettings() {
+        val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+            data = Uri.parse("package:$packageName")
+        }
+        openSettingsIntent(intent)
+    }
+
+    private fun openNotificationPolicySettings() {
+        openSettingsIntent(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+    }
+
+    private fun openAppDetails() {
+        openSettingsIntent(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:$packageName")
+        })
+    }
+
+    private fun openSettingsIntent(intent: Intent) {
+        try {
+            startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                openAppDetails()
+            } catch (_: Exception) {
+                toast("לא ניתן לפתוח את מסך ההרשאה במכשיר הזה")
+            }
+        }
+    }
+
+    private fun secureSettingsHelp() {
+        copyToClipboard("adb shell pm grant $packageName android.permission.WRITE_SECURE_SETTINGS")
+        toast("ההרשאה מחייבת ADB. הפקודה הועתקה ללוח.")
+    }
+
+    private fun copyToClipboard(value: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("Quick Control", value))
     }
 
     private fun findFlashCamera(): String? = try {
