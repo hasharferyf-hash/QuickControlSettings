@@ -28,7 +28,13 @@ class DashboardSmokeTest {
         Thread.sleep(600) // Allow system bars and activity transitions to settle.
         val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
         val directory = File(context.getExternalFilesDir(null), "qa").apply { mkdirs() }
-        File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        val file = File(directory, "$name.png")
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        // Gradle's device runner can uninstall the app after testing. Keep a shell-owned
+        // copy outside its app-specific directory so CI can retrieve the screenshots.
+        instrumentation.uiAutomation.executeShellCommand(
+            "mkdir -p /sdcard/Download/quickcontrol-qa && cp " + file.absolutePath + " /sdcard/Download/quickcontrol-qa/"
+        ).let { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).use { stream -> stream.readBytes() } }
         bitmap.recycle()
     }
 

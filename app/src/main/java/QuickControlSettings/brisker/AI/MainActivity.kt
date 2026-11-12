@@ -93,7 +93,8 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         @Suppress("DEPRECATION")
         if (Build.VERSION.SDK_INT >= 27) {
-            window.decorView.systemUiVisibility = if (isAppDark()) 0 else View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+            window.decorView.systemUiVisibility = if (isAppDark()) 0 else
+                View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
         } else {
             // Android 8.0 has white navigation icons; keep them readable in the light theme.
             window.navigationBarColor = Color.BLACK
@@ -410,7 +411,7 @@ class MainActivity : Activity() {
                 }
             }
             override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) { render() }
         })
         if (!canWrite) {
             textIn(c, "כדי לשנות מכאן, צריך לאפשר לאפליקציה לעדכן את הגדרות המסך.", 12, secondary)
@@ -788,4 +789,3 @@ class MainActivity : Activity() {
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
-

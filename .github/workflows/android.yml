@@ -62,7 +62,7 @@ jobs:
           disable-animations: true
           script: |
             gradle :app:connectedDebugAndroidTest
-            adb pull /sdcard/Android/data/QuickControlSettings.brisker.AI/files/qa ui-screenshots
+            adb pull /sdcard/Download/quickcontrol-qa ui-screenshots
 
       - name: Upload UI checks and screenshots
         if: always() && github.event_name == 'pull_request'
