@@ -23,7 +23,7 @@ class DashboardSmokeTest {
 
     private fun screenshot(name: String) {
         instrumentation.waitForIdleSync()
-        Thread.sleep(600) // Allow system bars and activity transitions to settle.
+        Thread.sleep(1000) // Allow system bars and activity transitions to settle.
         // Use individual shell commands: UiAutomation is not a shell parser. Store
         // captures outside app storage so Gradle's uninstall step cannot remove them.
         fun shell(command: String): String = instrumentation.uiAutomation.executeShellCommand(command).let {
@@ -51,6 +51,13 @@ class DashboardSmokeTest {
                     assertEquals(View.LAYOUT_DIRECTION_RTL, all.filterIsInstance<QuickTile>().first().layoutDirection)
                 }
                 screenshot("01-light")
+                scenario.onActivity { activity ->
+                    views(activity.window.decorView).filterIsInstance<android.widget.ScrollView>().first().fullScroll(View.FOCUS_DOWN)
+                }
+                screenshot("04-shortcuts")
+                scenario.onActivity { activity ->
+                    views(activity.window.decorView).filterIsInstance<android.widget.ScrollView>().first().scrollTo(0, 0)
+                }
                 scenario.onActivity { activity ->
                     views(activity.window.decorView).filterIsInstance<TextView>().first { it.text.toString().startsWith("עוד צלילים") }.performClick()
                 }
