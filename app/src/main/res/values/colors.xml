@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="panel_background">#F2F5FB</color>
+    <color name="panel_card">#FFFFFF</color>
+    <bool name="light_system_bars">true</bool>
+</resources>

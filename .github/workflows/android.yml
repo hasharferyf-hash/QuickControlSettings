@@ -43,7 +43,36 @@ jobs:
 
       - name: Build debug APK (pull requests only)
         if: github.event_name == 'pull_request'
-        run: gradle :app:assembleDebug
+        run: gradle :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug
+
+      - name: Enable KVM for emulator
+        if: github.event_name == 'pull_request'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Check RTL, themes and large text on Android 15
+        if: github.event_name == 'pull_request'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            gradle :app:connectedDebugAndroidTest
+            adb pull /sdcard/Android/data/QuickControlSettings.brisker.AI/files/qa ui-screenshots
+
+      - name: Upload UI checks and screenshots
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuickControlSettings-ui-checks
+          path: |
+            ui-screenshots
+            app/build/reports/androidTests
+            app/build/reports/lint-results-debug.html
 
       - name: Upload debug APK
         if: github.event_name == 'pull_request'
