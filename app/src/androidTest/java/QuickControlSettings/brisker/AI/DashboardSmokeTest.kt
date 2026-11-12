@@ -2,7 +2,6 @@ package QuickControlSettings.brisker.AI
 
 import android.content.Context
 import android.content.res.Configuration
-import android.graphics.Bitmap
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -12,7 +11,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
 
 /** Exercises the real RTL activity without granting any special device permissions. */
 @RunWith(AndroidJUnit4::class)
@@ -26,16 +24,17 @@ class DashboardSmokeTest {
     private fun screenshot(name: String) {
         instrumentation.waitForIdleSync()
         Thread.sleep(600) // Allow system bars and activity transitions to settle.
-        val bitmap = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
-        val directory = File(context.getExternalFilesDir(null), "qa").apply { mkdirs() }
-        val file = File(directory, "$name.png")
-        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        // Gradle's device runner can uninstall the app after testing. Keep a shell-owned
-        // copy outside its app-specific directory so CI can retrieve the screenshots.
-        instrumentation.uiAutomation.executeShellCommand(
-            "mkdir -p /sdcard/Download/quickcontrol-qa && cp " + file.absolutePath + " /sdcard/Download/quickcontrol-qa/"
-        ).let { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).use { stream -> stream.readBytes() } }
-        bitmap.recycle()
+        // Use individual shell commands: UiAutomation is not a shell parser. Store
+        // captures outside app storage so Gradle's uninstall step cannot remove them.
+        fun shell(command: String): String = instrumentation.uiAutomation.executeShellCommand(command).let {
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(it).use { stream -> stream.readBytes().toString(Charsets.UTF_8) }
+        }
+        shell("mkdir -p /data/local/tmp/quickcontrol-qa")
+        val file = "/data/local/tmp/quickcontrol-qa/$name.png"
+        val captureOutput = shell("screencap -p $file")
+        assertTrue("Screenshot failed: $captureOutput", captureOutput.isBlank())
+        val size = shell("stat -c %s $file").trim().toLongOrNull() ?: 0L
+        assertTrue("Screenshot is empty: $file", size > 0)
     }
 
     @Test fun dashboardSurvivesThemeAndFontChanges() {

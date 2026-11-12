@@ -62,7 +62,10 @@ jobs:
           disable-animations: true
           script: |
             gradle :app:connectedDebugAndroidTest
-            adb pull /sdcard/Download/quickcontrol-qa ui-screenshots
+            adb pull /data/local/tmp/quickcontrol-qa ui-screenshots
+            test -s ui-screenshots/01-light.png
+            test -s ui-screenshots/02-dark.png
+            test -s ui-screenshots/03-large-text.png
 
       - name: Upload UI checks and screenshots
         if: always() && github.event_name == 'pull_request'
