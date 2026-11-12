@@ -77,14 +77,19 @@ class MainActivity : Activity() {
     private val accent get() = Color.rgb(49, 109, 244)
     private val cardColor get() = com.google.android.material.color.MaterialColors.getColor(this, com.google.android.material.R.attr.colorSurfaceContainerLow, Color.WHITE)
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        val preferences = getSharedPreferences("appearance", MODE_PRIVATE)
+    override fun attachBaseContext(newBase: Context) {
+        val preferences = newBase.getSharedPreferences("appearance", MODE_PRIVATE)
         if (preferences.contains("dark")) {
-            val config = Configuration(baseContext.resources.configuration)
+            val config = Configuration(newBase.resources.configuration)
             config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
                 if (preferences.getBoolean("dark", false)) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
-            applyOverrideConfiguration(config)
+            super.attachBaseContext(newBase.createConfigurationContext(config))
+        } else {
+            super.attachBaseContext(newBase)
         }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         @Suppress("DEPRECATION")
         if (Build.VERSION.SDK_INT >= 27) {
@@ -471,7 +476,7 @@ class MainActivity : Activity() {
     private fun globalDarkModeCard() {
         val c = card()
         val granted = hasSecureSettings()
-        val isDark = (baseContext.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+        val isDark = (applicationContext.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
         switch(c, "מראה כהה בכל המכשיר", isDark, granted, onPermissionMissing = { secureSettingsHelp() }) { checked ->
             try {
@@ -483,7 +488,7 @@ class MainActivity : Activity() {
                 } else {
                     handler.postDelayed({
                         val savedMode = Settings.Secure.getInt(contentResolver, "ui_night_mode", -1)
-                        val activeDark = (baseContext.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                        val activeDark = (applicationContext.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
                             android.content.res.Configuration.UI_MODE_NIGHT_YES
                         if (savedMode == mode && activeDark == checked) {
                             toast(if (checked) "מצב כהה הופעל במכשיר" else "מצב בהיר הופעל במכשיר")
@@ -783,3 +788,4 @@ class MainActivity : Activity() {
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
+
