@@ -1,82 +1,61 @@
 # QuickControlSettings
 
-A compact Hebrew Android dashboard for direct device controls.
+A Hebrew Android quick-settings dashboard inspired by Samsung's quick panel.
+It uses native Material controls, RTL layout, rounded blue active tiles and light/dark surfaces.
 
-## Permission strategy
+## Everyday controls
 
-The manifest declares the standard and special permissions that may be useful for the implemented controls and planned Wi-Fi, Bluetooth, location and NFC features. Runtime permissions should be requested only when the user invokes a feature that needs them; the app must not request an unrelated bundle of permissions at startup.
+- Wi-Fi, Bluetooth, location, Do Not Disturb and Battery Saver: open the corresponding Android settings or supported inline panel. These tiles say that they open settings; they never pretend to toggle a protected radio.
+- Flashlight: toggles after camera permission is approved, and follows the camera service's actual state.
+- Sound mode: cycles through ring, vibrate and silent, with an access shortcut if Android blocks a change.
+- Auto-rotate: toggles with Modify system settings access.
+- Brightness and media volume: always within reach, with readable values and accessible labels. Dragging brightness switches to manual brightness.
+- Expandable sound/display controls: ring, notification and alarm volume, screen timeout, touch vibration and automatic brightness.
+- Shortcuts: internet, airplane mode, screen casting, storage, alarms, accessibility, display/text size and all settings. NFC appears only when the device has NFC.
+- App appearance: saved light/dark preference on Android 8 and above.
 
-### ADB-grantable permission
+Settings destinations vary between manufacturers. When a specific page is unavailable the app tries a related screen, then general Settings. Opening a shortcut requires no location or Bluetooth scanning permissions.
 
-With USB debugging enabled, run:
+## Permissions
+
+No permission bundle is requested at startup. Camera access is requested when the flashlight is first used. Modify system settings and Notification Policy Access open Android's own access screens when needed. Unused location, nearby-device, background, boot and service permissions have been removed.
+
+Advanced tools are collapsed by default. They offer device dark appearance, Battery Saver, animation scales and stay-awake while charging. These remain dependent on Android/OEM support. An ADB permission is optional:
 
 ```sh
 adb shell pm grant QuickControlSettings.brisker.AI android.permission.WRITE_SECURE_SETTINGS
 ```
 
-This is a development-level permission and is grantable through ADB on supported builds. It does not make the app a privileged/system app.
+The in-app copy button copies only this command. It does not grant unrelated permissions. WRITE_SETTINGS and Notification Policy Access have separate approval paths; WRITE_SECURE_SETTINGS is not root and does not bypass all platform restrictions.
 
-### Permissions that need a different grant path
+The app does not become Device Owner and cannot inherit another management app's privileges.
 
-- `WRITE_SETTINGS`: special app access. It is not granted by `pm grant`.
-- `ACCESS_NOTIFICATION_POLICY`: Notification Policy Access; it is not granted by `pm grant`.
-- `CAMERA`, `BLUETOOTH_CONNECT`, `BLUETOOTH_SCAN`, `NEARBY_WIFI_DEVICES`, and location permissions: runtime permissions, where applicable.
-- `ACCESS_BACKGROUND_LOCATION`: subject to Android's separate background-location approval rules.
+## Build and checks
 
-Whenever a supported permission is missing, the relevant control provides a one-tap shortcut to the exact Android access screen: `WRITE_SETTINGS` opens the per-app Modify system settings page, and Notification Policy Access opens the Do Not Disturb access page. Runtime permissions (for example CAMERA) are requested when the related feature is used; if access was denied, the app also offers a shortcut to its app-permissions page. If an OEM does not expose the exact destination, the app falls back to its app-details screen.
+Use JDK 17, Android SDK 35 and Gradle 8.9 (Android Studio can supply the SDK).
 
-`WRITE_SECURE_SETTINGS` is different: Android does not provide an ordinary user-facing grant screen for it. The app explains that ADB is required and offers a one-tap copy of the exact `pm grant` command. It does not pretend that opening a Settings page can grant this permission.
+```sh
+gradle :app:assembleDebug :app:lintDebug
+# With an Android emulator/device attached:
+gradle :app:connectedDebugAndroidTest
+```
 
-## Device Owner compatibility
+- Application ID: `QuickControlSettings.brisker.AI`
+- Minimum SDK: 26; target/compile SDK: 35
+- Kotlin, native Android Views, Material 3
 
-QuickControlSettings does **not** request or become Device Owner. It is intended to run alongside an already-enrolled Device Owner / DPC app.
+Pull-request CI compiles the app and test APK, runs Android Lint, then exercises the real activity on an Android 15 emulator. UI checks cover startup without special permissions, RTL, accessible tiles, expanded-section restoration, app appearance and 150% text. Light/dark/large-text screenshots and reports are uploaded as workflow artifacts. Release signing and tag publishing follow the existing workflow.
 
-Important: Device Owner privileges belong to the package that Android has designated as Device Owner. They are not inherited by other apps installed on the same device. If another DPC is Device Owner, QuickControlSettings cannot call that DPC's privileged DevicePolicyManager operations merely because Device Owner is active. To expose those capabilities inside this app, the DPC would need to provide an explicit, authenticated management interface, or QuickControlSettings would need to be granted the relevant privileged/system status by the device firmware.
+Before shipping, also check a physical Samsung phone: camera permission denial, flashlight availability while using the camera, hardware volume buttons, rotation changes, three-button/gesture navigation, all shortcuts, DND behavior and advanced controls after an ADB grant. OEM-specific behavior cannot be established by an emulator alone.
 
-## Android platform limitations
+## Suggested next improvements
 
-Declaring a permission is not the same as receiving it, and receiving a permission does not override API-level restrictions.
-
-- Modern Android restricts ordinary apps from enabling/disabling Wi-Fi, Bluetooth, Location, global dark theme and other protected system controls. Battery Saver can be attempted by writing the `low_power` global setting with `WRITE_SECURE_SETTINGS`, but the system or OEM may reject or override the request.
-- Wi-Fi and Bluetooth permissions can allow discovery, connection or communication in supported cases; they do not generally authorize toggling the system radios.
-- `WRITE_SECURE_SETTINGS` is not a universal system-control permission.
-- `WRITE_SETTINGS` and Notification Policy Access require separate special access.
-- Device Owner, privileged/system-app status, OEM APIs or root may be required for particular global operations, depending on Android version and firmware.
-
-## Current direct controls
-
-- Screen brightness, auto-rotate, screen timeout and touch haptic feedback, when `WRITE_SETTINGS` access is already available.
-- Media, ring, notification and alarm volume.
-- Ringer mode.
-- Flashlight, after CAMERA runtime permission is granted.
-- Do Not Disturb, after Notification Policy Access is granted.
-- Battery Saver through `Settings.Global` with `WRITE_SECURE_SETTINGS`, with the actual state checked through `PowerManager`.
-- System animation scales and stay-awake-while-charging through `Settings.Global`, with `WRITE_SECURE_SETTINGS`.
-- App-local dark appearance, with conventional sun/moon icons.
-- An About dialog with developer credit.
-- Screen timeout selection from a clear list of available durations.
-
-The current UI does not yet implement direct Wi-Fi, Bluetooth, Location or NFC toggles. Their manifest permissions are declared for future implementation where Android permits it; they do not imply those controls can be toggled on every device.
-
-## UI
-
-The app uses a Material 3 DayNight theme with dynamic system colors on supported Android versions, Material switches and buttons, rounded surfaces, and RTL layout.
-
-## Build
-
-Open the project in Android Studio with JDK 17 and Android SDK 35.
-
-- Namespace / application ID: `QuickControlSettings.brisker.AI`
-- Kotlin
-- Gradle Kotlin DSL
-- Minimum SDK: 26
-- Target SDK: 35
+1. Let people choose their favorite tiles and reorder them.
+2. Add a home-screen widget and native Quick Settings tiles for the most-used controls.
+3. Move all Hebrew copy into string resources before adding more languages.
+4. Split device-control logic from the Activity and add capability-specific tests.
+5. Add screenshots and a short first-run guide to the release page.
 
 ## License
 
 GNU General Public License v3.0. See [LICENSE](LICENSE).
-
-
-## Continuous integration
-
-GitHub Actions builds the debug APK on pushes to `main` and pull requests targeting `main`. The generated APK is uploaded as the `QuickControlSettings-debug` workflow artifact.
