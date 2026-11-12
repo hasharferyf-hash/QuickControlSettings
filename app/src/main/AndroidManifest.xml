@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- ADB-grantable development permission on supported Android builds. -->
-    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+    <!-- Intentionally declared for an optional ADB development grant. Every use checks
+         access first; ordinary installation does not grant this permission. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
 
     <!-- Special app access / notification policy access; cannot be granted by pm grant. -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
@@ -15,6 +17,8 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.NFC" />
 
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
     <uses-feature android:name="android.hardware.nfc" android:required="false" />
 

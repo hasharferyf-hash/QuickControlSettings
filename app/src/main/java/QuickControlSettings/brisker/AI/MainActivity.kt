@@ -86,6 +86,13 @@ class MainActivity : Activity() {
             applyOverrideConfiguration(config)
         }
         super.onCreate(savedInstanceState)
+        @Suppress("DEPRECATION")
+        if (Build.VERSION.SDK_INT >= 27) {
+            window.decorView.systemUiVisibility = if (isAppDark()) 0 else View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        } else {
+            // Android 8.0 has white navigation icons; keep them readable in the light theme.
+            window.navigationBarColor = Color.BLACK
+        }
         detailsExpanded = savedInstanceState?.getBoolean("details") ?: false
         advancedExpanded = savedInstanceState?.getBoolean("advanced") ?: false
         scrollPosition = savedInstanceState?.getInt("scroll") ?: 0
@@ -776,4 +783,3 @@ class MainActivity : Activity() {
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
-

@@ -53,6 +53,7 @@ class DashboardSmokeTest {
                     assertTrue(views(activity.window.decorView).filterIsInstance<TextView>().any { it.text.toString() == "מתי המסך ייכבה?" })
                 }
                 scenario.recreate()
+                instrumentation.waitForIdleSync()
                 scenario.onActivity { activity ->
                     assertTrue(views(activity.window.decorView).filterIsInstance<TextView>().any { it.text.toString() == "מתי המסך ייכבה?" })
                     views(activity.window.decorView).filterIsInstance<TextView>().first { it.text.toString().startsWith("עוד צלילים") }.performClick()
