@@ -261,7 +261,7 @@ class MainActivity : Activity() {
                 }
             },
             Tile("לא להפריע", if (dnd) "פועל · פתיחה" else "כבוי · פתיחה", R.drawable.ic_dnd, dnd) {
-                openShortcut(Settings.ACTION_ZEN_MODE_SETTINGS, Settings.ACTION_SOUND_SETTINGS)
+                openShortcut("android.settings.ZEN_MODE_SETTINGS", Settings.ACTION_SOUND_SETTINGS)
             },
             Tile("מיקום", if (location) "פועל · פתיחה" else "כבוי · פתיחה", R.drawable.ic_location, location) { openShortcut(Settings.ACTION_LOCATION_SOURCE_SETTINGS) },
             Tile("חיסכון בסוללה", if ((getSystemService(POWER_SERVICE) as PowerManager).isPowerSaveMode) "פועל · פתיחה" else "פתיחת הגדרות", R.drawable.ic_battery,
@@ -384,7 +384,7 @@ class MainActivity : Activity() {
         val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val number = TextView(this).apply { text = "${value * 100 / 255}%"; setTextColor(secondary); textSize = 12f }
         val seek = SeekBar(this).apply { max = 255; progress = value; isEnabled = canWrite; contentDescription = "בהירות מסך"; progressTintList = ColorStateList.valueOf(accent); thumbTintList = ColorStateList.valueOf(accent) }
-        line.addView(seek, LinearLayout.LayoutParams(0, dp(42), 1f))
+        line.addView(seek, LinearLayout.LayoutParams(0, dp(48), 1f))
         line.addView(number)
         c.addView(line)
         seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -413,7 +413,9 @@ class MainActivity : Activity() {
     private fun topBar() {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         textIn(row, "Quick Control", 13, secondary, true).layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
-        val about = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonTextStyle).apply {
+        val about = MaterialButton(this).apply {
+            backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+            setTextColor(accent)
             text = "אודות"
             isAllCaps = false
             minimumHeight = dp(48)
@@ -462,7 +464,7 @@ class MainActivity : Activity() {
     private fun globalDarkModeCard() {
         val c = card()
         val granted = hasSecureSettings()
-        val isDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+        val isDark = (baseContext.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
         switch(c, "מראה כהה בכל המכשיר", isDark, granted, onPermissionMissing = { secureSettingsHelp() }) { checked ->
             try {
@@ -472,9 +474,9 @@ class MainActivity : Activity() {
                     toast("השינוי לא נשמר. אפשר לנסות שוב.")
                     render()
                 } else {
-                    Handler(Looper.getMainLooper()).postDelayed({
+                    handler.postDelayed({
                         val savedMode = Settings.Secure.getInt(contentResolver, "ui_night_mode", -1)
-                        val activeDark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                        val activeDark = (baseContext.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
                             android.content.res.Configuration.UI_MODE_NIGHT_YES
                         if (savedMode == mode && activeDark == checked) {
                             toast(if (checked) "מצב כהה הופעל במכשיר" else "מצב בהיר הופעל במכשיר")
@@ -507,7 +509,7 @@ class MainActivity : Activity() {
         val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val number = TextView(this).apply { text = "$current/$max"; setTextColor(secondary); textSize = 12f }
         val seek = SeekBar(this).apply { this.max = max; progress = current; contentDescription = label; progressTintList = ColorStateList.valueOf(accent); thumbTintList = ColorStateList.valueOf(accent) }
-        line.addView(seek, LinearLayout.LayoutParams(0, dp(40), 1f))
+        line.addView(seek, LinearLayout.LayoutParams(0, dp(48), 1f))
         line.addView(number)
         c.addView(line)
         seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -543,7 +545,7 @@ class MainActivity : Activity() {
                     render()
                 } else {
                     // The system observes this setting asynchronously; verify after its observer runs.
-                    Handler(Looper.getMainLooper()).postDelayed({
+                    handler.postDelayed({
                         val setting = Settings.Global.getInt(contentResolver, "low_power", 0) == 1
                         val active = power.isPowerSaveMode
                         when {
@@ -774,3 +776,4 @@ class MainActivity : Activity() {
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
+
