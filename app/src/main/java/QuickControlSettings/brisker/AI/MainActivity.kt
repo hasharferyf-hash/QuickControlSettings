@@ -213,7 +213,14 @@ class MainActivity : Activity() {
             stayAwakeCard()
             secureSettingsCard()
         }
-        scroll.post { scroll.scrollTo(0, scrollPosition) }
+        scroll.post {
+            scroll.scrollTo(0, scrollPosition)
+            if (Build.VERSION.SDK_INT >= 30) {
+                val lightBars = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+                    android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+                window.insetsController?.setSystemBarsAppearance(if (isAppDark()) 0 else lightBars, lightBars)
+            }
+        }
     }
 
     private fun sectionButton(title: String, expanded: Boolean, action: () -> Unit) {
@@ -789,3 +796,4 @@ class MainActivity : Activity() {
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
+
