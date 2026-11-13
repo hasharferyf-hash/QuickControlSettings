@@ -19,7 +19,7 @@ class QuickTile(
     icon: Int,
     active: Boolean,
     toggle: Boolean,
-    private val foreground: Int,
+    private val inkColor: Int,
     muted: Int,
     private val surface: Int,
     private val accent: Int,
@@ -39,7 +39,7 @@ class QuickTile(
         }
         if (currentActive != active) {
             currentActive = active
-            circle.iconTint = ColorStateList.valueOf(if (active) Color.WHITE else foreground)
+            circle.iconTint = ColorStateList.valueOf(if (active) Color.WHITE else inkColor)
             circle.backgroundTintList = ColorStateList.valueOf(if (active) accent else surface)
         }
     }
@@ -70,7 +70,7 @@ class QuickTile(
             iconSize = dp(26)
             iconPadding = 0
             iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-            iconTint = ColorStateList.valueOf(if (active) Color.WHITE else foreground)
+            iconTint = ColorStateList.valueOf(if (active) Color.WHITE else inkColor)
             backgroundTintList = ColorStateList.valueOf(if (active) accent else surface)
             isClickable = false
             isFocusable = false
@@ -84,7 +84,7 @@ class QuickTile(
             gravity = Gravity.CENTER
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         }
-        addView(caption(label, 13f, foreground).apply {
+        addView(caption(label, 13f, inkColor).apply {
             setTypeface(typeface, Typeface.BOLD)
             setPadding(0, dp(9), 0, 0)
         }, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -100,3 +100,4 @@ class QuickTile(
         }
     }
 }
+
