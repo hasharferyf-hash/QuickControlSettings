@@ -114,7 +114,8 @@ class DashboardSmokeTest {
                     scroll = all.filterIsInstance<android.widget.ScrollView>().first()
                     tile = all.filterIsInstance<QuickTile>().first()
                     slider = all.filterIsInstance<android.widget.SeekBar>().last()
-                    scroll.fullScroll(View.FOCUS_DOWN)
+                    // Set the test position immediately; fullScroll animates asynchronously.
+                    scroll.scrollTo(0, scroll.getChildAt(0).height)
                 }
                 instrumentation.waitForIdleSync()
                 scenario.onActivity { position = scroll.scrollY; assertTrue(position > 0) }
@@ -158,3 +159,4 @@ class DashboardSmokeTest {
     }
 
 }
+
