@@ -55,18 +55,22 @@ class MainActivity : Activity() {
     private var activeScroll: ScrollView? = null
     private var torchAvailable = true
     private var monitoring = false
+    private val stateBindings = mutableListOf<() -> Unit>()
+    private var updatingState = false
+    private var draggingSlider = false
+    private var permissionState = ""
     private val handler = Handler(Looper.getMainLooper())
-    private val refresh = Runnable { if (!isFinishing && !isDestroyed) render() }
+    private val refresh = Runnable { if (!isFinishing && !isDestroyed) refreshState() }
     private val torchCallback = object : CameraManager.TorchCallback() {
         override fun onTorchModeChanged(cameraId: String, enabled: Boolean) {
-            if (cameraId == torchId) {
+            if (cameraId == torchId && (torchEnabled != enabled || !torchAvailable)) {
                 torchEnabled = enabled
                 torchAvailable = true
                 scheduleRefresh()
             }
         }
         override fun onTorchModeUnavailable(cameraId: String) {
-            if (cameraId == torchId) { torchAvailable = false; scheduleRefresh() }
+            if (cameraId == torchId && torchAvailable) { torchAvailable = false; scheduleRefresh() }
         }
     }
     private val stateReceiver = object : BroadcastReceiver() {
@@ -128,11 +132,12 @@ class MainActivity : Activity() {
             @Suppress("DEPRECATION")
             registerReceiver(stateReceiver, filter)
         }
-        render()
+        refreshState()
     }
 
     override fun onPause() {
         monitoring = false
+        draggingSlider = false
         handler.removeCallbacksAndMessages(null)
         camera.unregisterTorchCallback(torchCallback)
         unregisterReceiver(stateReceiver)
@@ -152,7 +157,7 @@ class MainActivity : Activity() {
             if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) toggleTorch()
             else {
                 toast("בלי גישה למצלמה אי אפשר להדליק את הפנס. אפשר לאשר דרך הגדרות האפליקציה.")
-                render()
+                refreshState()
             }
         }
     }
@@ -161,9 +166,22 @@ class MainActivity : Activity() {
         if (monitoring) { handler.removeCallbacks(refresh); handler.postDelayed(refresh, 150) }
     }
 
+    private fun currentPermissionState(): String =
+        "${Settings.System.canWrite(this)}:${hasSecureSettings()}:${checkSelfPermission(android.Manifest.permission.CAMERA)}"
+
+    private fun refreshState() {
+        if (draggingSlider || !::page.isInitialized) return
+        if (permissionState != currentPermissionState()) { render(); return }
+        updatingState = true
+        try { stateBindings.forEach { it() } }
+        finally { updatingState = false }
+    }
+
     private fun render() {
         scrollPosition = activeScroll?.scrollY ?: scrollPosition
-        val scroll = ScrollView(this).apply {
+        stateBindings.clear()
+        permissionState = currentPermissionState()
+        val scroll = activeScroll ?: ScrollView(this).apply {
             setBackgroundColor(if (isAppDark()) Color.rgb(18, 21, 28) else Color.rgb(242, 245, 251))
             isFillViewport = true
             clipToPadding = false
@@ -174,15 +192,20 @@ class MainActivity : Activity() {
                 insets
             }
         }
+        val firstRender = activeScroll == null
         activeScroll = scroll
-        page = LinearLayout(this).apply {
+        if (firstRender) page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutDirection = View.LAYOUT_DIRECTION_RTL
             setPadding(dp(20), dp(16), dp(20), dp(28))
         }
-        scroll.addView(page)
-        setContentView(scroll)
-        scroll.requestApplyInsets()
+        if (firstRender) {
+            scroll.addView(page)
+            setContentView(scroll)
+            scroll.requestApplyInsets()
+        } else {
+            page.removeAllViews()
+        }
         topBar()
         quickControls()
         gap(10)
@@ -240,21 +263,34 @@ class MainActivity : Activity() {
         val active: Boolean = false, val toggle: Boolean = false, val action: () -> Unit
     )
 
-    private fun tileGrid(tiles: List<Tile>) {
+    private fun tileGrid(tiles: List<Tile>): List<QuickTile> {
+        val controls = mutableListOf<QuickTile>()
         val columns = if (resources.configuration.screenWidthDp >= 600) 6
             else if (resources.configuration.fontScale >= 1.3f || resources.configuration.screenWidthDp < 360) 3 else 4
         tiles.chunked(columns).forEach { group ->
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             group.forEach { tile ->
-                row.addView(QuickTile(this, tile.label, tile.status, tile.icon, tile.active, tile.toggle,
-                    dark, secondary, cardColor, accent, tile.action), LinearLayout.LayoutParams(0, -2, 1f))
+                val control = QuickTile(this, tile.label, tile.status, tile.icon, tile.active, tile.toggle,
+                    dark, secondary, cardColor, accent, tile.action)
+                controls.add(control)
+                row.addView(control, LinearLayout.LayoutParams(0, -2, 1f))
             }
             repeat(columns - group.size) { row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)) }
             page.addView(row)
         }
+        return controls
     }
 
     private fun quickControls() {
+        val controls = tileGrid(quickControlTiles())
+        stateBindings.add {
+            quickControlTiles().zip(controls).forEach { (tile, control) ->
+                control.updateState(tile.status, tile.active, tile.action)
+            }
+        }
+    }
+
+    private fun quickControlTiles(): List<Tile> {
         val write = Settings.System.canWrite(this)
         val rotation = Settings.System.getInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, 0) == 1
         val silent = audio.ringerMode != AudioManager.RINGER_MODE_NORMAL
@@ -266,7 +302,7 @@ class MainActivity : Activity() {
         } catch (_: Exception) { false }
         // Read the device setting, not this app's automatic DND rule (Android 15+).
         val dnd = Settings.Global.getInt(contentResolver, "zen_mode", 0) != 0
-        tileGrid(listOf(
+        return listOf(
             Tile("Wi-Fi", if (wifi) "פועל · פתיחה" else "כבוי · פתיחה", R.drawable.ic_wifi, wifi) {
                 openShortcut(if (Build.VERSION.SDK_INT >= 29) Settings.Panel.ACTION_WIFI else Settings.ACTION_WIFI_SETTINGS, Settings.ACTION_WIFI_SETTINGS)
             },
@@ -277,7 +313,7 @@ class MainActivity : Activity() {
                 if (!write) openWriteSettings() else {
                     try { Settings.System.putInt(contentResolver, Settings.System.ACCELEROMETER_ROTATION, if (rotation) 0 else 1) }
                     catch (_: SecurityException) { openWriteSettings() }
-                    render()
+                    refreshState()
                 }
             },
             Tile("לא להפריע", if (dnd) "פועל · פתיחה" else "כבוי · פתיחה", R.drawable.ic_dnd, dnd) {
@@ -286,7 +322,7 @@ class MainActivity : Activity() {
             Tile("מיקום", if (location) "פועל · פתיחה" else "כבוי · פתיחה", R.drawable.ic_location, location) { openShortcut(Settings.ACTION_LOCATION_SOURCE_SETTINGS) },
             Tile("חיסכון בסוללה", if ((getSystemService(POWER_SERVICE) as PowerManager).isPowerSaveMode) "פועל · פתיחה" else "פתיחת הגדרות", R.drawable.ic_battery,
                 (getSystemService(POWER_SERVICE) as PowerManager).isPowerSaveMode) { openShortcut(Settings.ACTION_BATTERY_SAVER_SETTINGS) }
-        ))
+        )
     }
 
     private fun shortcuts() {
@@ -332,7 +368,7 @@ class MainActivity : Activity() {
         }
         try { audio.ringerMode = next }
         catch (_: SecurityException) { openNotificationPolicySettings() }
-        render()
+        refreshState()
     }
 
     /** OEMs may omit an activity; try the standard destination, then a useful fallback. */
@@ -417,9 +453,15 @@ class MainActivity : Activity() {
                     } catch (_: SecurityException) { openWriteSettings() }
                 }
             }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) { render() }
+            override fun onStartTrackingTouch(s: SeekBar?) { draggingSlider = true }
+            override fun onStopTrackingTouch(s: SeekBar?) { draggingSlider = false; refreshState() }
         })
+        stateBindings.add {
+            val actual = Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128)
+            if (seek.progress != actual) seek.progress = actual
+            val label = "${actual * 100 / 255}%"
+            if (number.text.toString() != label) number.text = label
+        }
         if (!canWrite) {
             textIn(c, "כדי לשנות מכאן, צריך לאפשר לאפליקציה לעדכן את הגדרות המסך.", 12, secondary)
             permissionButton(c, "בואו נאפשר את זה") { openWriteSettings() }
@@ -465,11 +507,17 @@ class MainActivity : Activity() {
         page.addView(row)
         gap(24)
         addText("הכול בלחיצה", 34, dark, true)
-        val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
-        val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
-        val date = SimpleDateFormat("EEEE, d בMMMM", Locale.forLanguageTag("he")).format(Date())
-        addText(date + if (level >= 0 && scale > 0) "  ·  סוללה ${level * 100 / scale}%" else "", 13, secondary)
+        val summary = addText("", 13, secondary)
+        val updateSummary: () -> Unit = {
+            val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val level = battery?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = battery?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+            val date = SimpleDateFormat("EEEE, d בMMMM", Locale.forLanguageTag("he")).format(Date())
+            val label = date + if (level >= 0 && scale > 0) "  ·  סוללה ${level * 100 / scale}%" else ""
+            if (summary.text.toString() != label) summary.text = label
+        }
+        updateSummary()
+        stateBindings.add(updateSummary)
         gap(18)
     }
 
@@ -486,13 +534,15 @@ class MainActivity : Activity() {
         val granted = hasSecureSettings()
         val isDark = (applicationContext.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
-        switch(c, "מראה כהה בכל המכשיר", isDark, granted, onPermissionMissing = { secureSettingsHelp() }) { checked ->
+        switch(c, "מראה כהה בכל המכשיר", isDark, granted, onPermissionMissing = { secureSettingsHelp() }, readChecked = {
+            (applicationContext.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        }) { checked ->
             try {
                 val mode = if (checked) UiModeManager.MODE_NIGHT_YES else UiModeManager.MODE_NIGHT_NO
                 val written = Settings.Secure.putInt(contentResolver, "ui_night_mode", mode)
                 if (!written) {
                     toast("השינוי לא נשמר. אפשר לנסות שוב.")
-                    render()
+                    refreshState()
                 } else {
                     handler.postDelayed({
                         val savedMode = Settings.Secure.getInt(contentResolver, "ui_night_mode", -1)
@@ -503,15 +553,15 @@ class MainActivity : Activity() {
                         } else {
                             toast("המכשיר לא הפעיל את השינוי. אפשר לשנות דרך הגדרות התצוגה.")
                         }
-                        render()
+                        refreshState()
                     }, 700)
                 }
             } catch (_: SecurityException) {
                 toast("צריך אישור חד־פעמי דרך מחשב כדי להשתמש באפשרות הזו")
-                render()
+                refreshState()
             } catch (_: Exception) {
                 toast("המכשיר הזה לא מאפשר לשנות מכאן את המראה שלו")
-                render()
+                refreshState()
             }
         }
         textIn(c, "מחליף בין מראה בהיר לכהה בכל המכשיר. לא עובד בכל הדגמים.", 12, secondary)
@@ -545,9 +595,15 @@ class MainActivity : Activity() {
                     if (actual != p) s?.progress = actual
                 }
             }
-            override fun onStartTrackingTouch(s: SeekBar?) {}
-            override fun onStopTrackingTouch(s: SeekBar?) {}
+            override fun onStartTrackingTouch(s: SeekBar?) { draggingSlider = true }
+            override fun onStopTrackingTouch(s: SeekBar?) { draggingSlider = false; refreshState() }
         })
+        stateBindings.add {
+            val actual = audio.getStreamVolume(stream)
+            if (seek.progress != actual) seek.progress = actual
+            val label = "$actual/$max"
+            if (number.text.toString() != label) number.text = label
+        }
     }
 
     private fun hasSecureSettings(): Boolean =
@@ -557,12 +613,12 @@ class MainActivity : Activity() {
         val c = card()
         val power = getSystemService(POWER_SERVICE) as PowerManager
         val granted = hasSecureSettings()
-        switch(c, "חיסכון בסוללה", power.isPowerSaveMode, granted, onPermissionMissing = { secureSettingsHelp() }) { checked ->
+        switch(c, "חיסכון בסוללה", power.isPowerSaveMode, granted, onPermissionMissing = { secureSettingsHelp() }, readChecked = { power.isPowerSaveMode }) { checked ->
             try {
                 val written = Settings.Global.putInt(contentResolver, "low_power", if (checked) 1 else 0)
                 if (!written) {
                     toast("השינוי לא נשמר. אפשר לנסות שוב.")
-                    render()
+                    refreshState()
                 } else {
                     // The system observes this setting asynchronously; verify after its observer runs.
                     handler.postDelayed({
@@ -572,15 +628,15 @@ class MainActivity : Activity() {
                             setting == checked && active == checked -> toast(if (checked) "חיסכון בסוללה הופעל" else "חיסכון בסוללה כובה")
                             else -> toast("המכשיר לא הפעיל את השינוי. אפשר לפתוח את הגדרות הסוללה.")
                         }
-                        render()
+                        refreshState()
                     }, 500)
                 }
             } catch (_: SecurityException) {
                 toast("צריך אישור חד־פעמי דרך מחשב כדי להשתמש באפשרות הזו")
-                render()
+                refreshState()
             } catch (_: Exception) {
                 toast("לא ניתן לשנות את מצב חיסכון בסוללה במכשיר זה")
-                render()
+                refreshState()
             }
         }
         textIn(c, "בחלק מהמכשירים אפשר לשנות את זה רק דרך הגדרות הסוללה.", 12, secondary)
@@ -598,14 +654,14 @@ class MainActivity : Activity() {
         val keys = listOf("window_animation_scale", "transition_animation_scale", "animator_duration_scale")
         val granted = hasSecureSettings()
         val disabled = try { Settings.Global.getFloat(contentResolver, keys[0], 1f) == 0f } catch (_: Exception) { false }
-        switch(c, "פחות תנועה במסך", disabled, granted, onPermissionMissing = { secureSettingsHelp() }) { checked ->
+        switch(c, "פחות תנועה במסך", disabled, granted, onPermissionMissing = { secureSettingsHelp() }, readChecked = { Settings.Global.getFloat(contentResolver, keys[0], 1f) == 0f }) { checked ->
             try {
                 val value = if (checked) 0f else 1f
                 val results = keys.map { Settings.Global.putFloat(contentResolver, it, value) }
                 if (results.all { it }) toast(if (checked) "האנימציות בוטלו" else "האנימציות הוחזרו")
                 else toast("חלק מהגדרות האנימציה לא עודכנו")
             } catch (_: SecurityException) { toast("צריך קודם לתת אישור דרך מחשב") }
-            render()
+            refreshState()
         }
         textIn(c, "מבטל את אפקטי המעבר בין מסכים. בכיבוי חוזרים למהירות הרגילה.", 12, secondary)
     }
@@ -614,11 +670,11 @@ class MainActivity : Activity() {
         val c = card()
         val granted = hasSecureSettings()
         val mask = try { Settings.Global.getInt(contentResolver, "stay_on_while_plugged_in", 0) } catch (_: Exception) { 0 }
-        switch(c, "מסך דולק בזמן טעינה", mask != 0, granted, onPermissionMissing = { secureSettingsHelp() }) { checked ->
+        switch(c, "מסך דולק בזמן טעינה", mask != 0, granted, onPermissionMissing = { secureSettingsHelp() }, readChecked = { Settings.Global.getInt(contentResolver, "stay_on_while_plugged_in", 0) != 0 }) { checked ->
             try {
                 Settings.Global.putInt(contentResolver, "stay_on_while_plugged_in", if (checked) 7 else 0)
             } catch (_: SecurityException) { toast("צריך קודם לתת אישור דרך מחשב") }
-            render()
+            refreshState()
         }
         textIn(c, "המסך יישאר דולק כשהמכשיר מחובר למטען.", 12, secondary)
     }
@@ -635,18 +691,22 @@ class MainActivity : Activity() {
             isAllCaps = false
             isEnabled = allowed
             setOnClickListener {
-                val selected = options.indexOf(current)
+                val selected = options.indexOf(Settings.System.getInt(contentResolver, Settings.System.SCREEN_OFF_TIMEOUT, 60000))
                 android.app.AlertDialog.Builder(this@MainActivity)
                     .setTitle("מתי המסך ייכבה?")
                     .setSingleChoiceItems(labels, selected) { dialog, which ->
                         try { Settings.System.putInt(contentResolver, Settings.System.SCREEN_OFF_TIMEOUT, options[which]) }
                         catch (_: SecurityException) { openWriteSettings() }
                         dialog.dismiss()
-                        render()
+                        refreshState()
                     }
                     .setNegativeButton("ביטול", null)
                     .show()
             }
+        }
+        stateBindings.add {
+            val label = "כרגע: " + timeoutLabel(Settings.System.getInt(contentResolver, Settings.System.SCREEN_OFF_TIMEOUT, 60000))
+            if (button.text.toString() != label) button.text = label
         }
         c.addView(button)
         if (!allowed) {
@@ -665,7 +725,7 @@ class MainActivity : Activity() {
     private fun autoBrightnessCard() {
         val c = card()
         val enabled = Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, 0) == 1
-        switch(c, "בהירות אוטומטית", enabled, Settings.System.canWrite(this), onPermissionMissing = { openWriteSettings() }) { checked ->
+        switch(c, "בהירות אוטומטית", enabled, Settings.System.canWrite(this), onPermissionMissing = { openWriteSettings() }, readChecked = { Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, 0) == 1 }) { checked ->
             try { Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, if (checked) 1 else 0) }
             catch (_: SecurityException) { openWriteSettings() }
         }
@@ -676,7 +736,7 @@ class MainActivity : Activity() {
         val c = card()
         val allowed = Settings.System.canWrite(this)
         val enabled = Settings.System.getInt(contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) == 1
-        switch(c, "רטט בלחיצה", enabled, allowed, onPermissionMissing = { openWriteSettings() }) { checked ->
+        switch(c, "רטט בלחיצה", enabled, allowed, onPermissionMissing = { openWriteSettings() }, readChecked = { Settings.System.getInt(contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) == 1 }) { checked ->
             try { Settings.System.putInt(contentResolver, Settings.System.HAPTIC_FEEDBACK_ENABLED, if (checked) 1 else 0) }
             catch (_: SecurityException) { openWriteSettings() }
         }
@@ -712,6 +772,7 @@ class MainActivity : Activity() {
         checked: Boolean,
         enabled: Boolean,
         onPermissionMissing: (() -> Unit)? = null,
+        readChecked: (() -> Boolean)? = null,
         action: (Boolean) -> Unit
     ) {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -721,7 +782,11 @@ class MainActivity : Activity() {
             isChecked = checked
             isEnabled = enabled
             contentDescription = label
-            setOnCheckedChangeListener { _, value -> action(value) }
+            setOnCheckedChangeListener { _, value -> if (!updatingState) action(value) }
+        }
+        if (readChecked != null) stateBindings.add {
+            val actual = readChecked()
+            if (control.isChecked != actual) control.isChecked = actual
         }
         row.addView(control)
         parent.addView(row)
@@ -796,4 +861,3 @@ class MainActivity : Activity() {
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
-

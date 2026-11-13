@@ -95,4 +95,66 @@ class DashboardSmokeTest {
             preferences.edit().clear().commit()
         }
     }
+    @Test fun repeatedBatteryUpdatesKeepControlsAndScrollAttached() {
+        fun shell(command: String) {
+            instrumentation.uiAutomation.executeShellCommand(command).let {
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(it).use { stream -> stream.readBytes() }
+            }
+        }
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                instrumentation.waitForIdleSync()
+                Thread.sleep(350)
+                lateinit var scroll: android.widget.ScrollView
+                lateinit var tile: QuickTile
+                lateinit var slider: android.widget.SeekBar
+                var position = 0
+                scenario.onActivity { activity ->
+                    val all = views(activity.window.decorView)
+                    scroll = all.filterIsInstance<android.widget.ScrollView>().first()
+                    tile = all.filterIsInstance<QuickTile>().first()
+                    slider = all.filterIsInstance<android.widget.SeekBar>().last()
+                    scroll.fullScroll(View.FOCUS_DOWN)
+                }
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { position = scroll.scrollY; assertTrue(position > 0) }
+                for (level in 86..89) {
+                    shell("dumpsys battery set level $level")
+                    Thread.sleep(400) // Past the broadcast coalescing interval.
+                    instrumentation.waitForIdleSync()
+                    scenario.onActivity { activity ->
+                        val all = views(activity.window.decorView)
+                        assertSame("Battery update replaced the scroll view", scroll, all.filterIsInstance<android.widget.ScrollView>().first())
+                        assertSame("Battery update replaced the tile", tile, all.filterIsInstance<QuickTile>().first())
+                        assertSame("Battery update replaced the slider", slider, all.filterIsInstance<android.widget.SeekBar>().last())
+                        assertEquals("Battery update moved the page", position, scroll.scrollY)
+                        assertTrue(all.filterIsInstance<TextView>().any { it.text.contains("$level%") })
+                    }
+                }
+                // A radio/settings callback arriving mid-gesture must keep the active slider.
+                scenario.onActivity {
+                    slider.requestFocus()
+                    val event = android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_DOWN, (slider.width / 2).toFloat(), (slider.height / 2).toFloat(), 0)
+                    slider.onTouchEvent(event)
+                    event.recycle()
+                    val move = android.view.MotionEvent.obtain(0, 10, android.view.MotionEvent.ACTION_MOVE, (slider.width * 3 / 4).toFloat(), (slider.height / 2).toFloat(), 0)
+                    slider.onTouchEvent(move)
+                    move.recycle()
+                }
+                shell("dumpsys battery set level 90")
+                Thread.sleep(400)
+                scenario.onActivity { activity ->
+                    assertSame(slider, views(activity.window.decorView).filterIsInstance<android.widget.SeekBar>().last())
+                    val event = android.view.MotionEvent.obtain(0, 10, android.view.MotionEvent.ACTION_UP, (slider.width / 2).toFloat(), (slider.height / 2).toFloat(), 0)
+                    slider.onTouchEvent(event)
+                    event.recycle()
+                }
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    assertTrue(views(activity.window.decorView).filterIsInstance<TextView>().any { it.text.contains("90%") })
+                }
+            }
+        } finally { shell("dumpsys battery reset") }
+    }
+
 }

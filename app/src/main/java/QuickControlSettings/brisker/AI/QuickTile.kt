@@ -14,17 +14,36 @@ import com.google.android.material.button.MaterialButton
 /** A single accessible target: the label, icon and state all activate the same action. */
 class QuickTile(
     context: Context,
-    label: String,
+    private val label: String,
     status: String,
     icon: Int,
     active: Boolean,
     toggle: Boolean,
-    foreground: Int,
+    private val foreground: Int,
     muted: Int,
-    surface: Int,
-    accent: Int,
+    private val surface: Int,
+    private val accent: Int,
     onClick: () -> Unit
 ) : LinearLayout(context) {
+    private lateinit var circle: MaterialButton
+    private lateinit var statusText: TextView
+    private var currentActive = active
+    private var currentStatus = status
+
+    fun updateState(status: String, active: Boolean, onClick: () -> Unit) {
+        setOnClickListener { onClick() }
+        if (currentStatus != status) {
+            currentStatus = status
+            statusText.text = status
+            contentDescription = "$label, $status"
+        }
+        if (currentActive != active) {
+            currentActive = active
+            circle.iconTint = ColorStateList.valueOf(if (active) Color.WHITE else foreground)
+            circle.backgroundTintList = ColorStateList.valueOf(if (active) accent else surface)
+        }
+    }
+
     init {
         orientation = VERTICAL
         gravity = Gravity.CENTER
@@ -39,7 +58,7 @@ class QuickTile(
         isFocusable = true
         contentDescription = "$label, $status"
         setOnClickListener { onClick() }
-        val circle = MaterialButton(context).apply {
+        circle = MaterialButton(context).apply {
             text = ""
             insetTop = 0
             insetBottom = 0
@@ -69,13 +88,14 @@ class QuickTile(
             setTypeface(typeface, Typeface.BOLD)
             setPadding(0, dp(9), 0, 0)
         }, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        addView(caption(status, 11f, muted))
+        statusText = caption(status, 11f, muted)
+        addView(statusText)
         accessibilityDelegate = object : AccessibilityDelegate() {
             override fun onInitializeAccessibilityNodeInfo(host: android.view.View, info: AccessibilityNodeInfo) {
                 super.onInitializeAccessibilityNodeInfo(host, info)
                 info.className = if (toggle) "android.widget.Switch" else "android.widget.Button"
                 info.isCheckable = toggle
-                info.isChecked = toggle && active
+                info.isChecked = toggle && currentActive
             }
         }
     }
